@@ -110,6 +110,18 @@ Three core interfaces for testability (no root in tests):
 
 **Implemented Packages**:
 
+0. **provisioner/** (Phase 01 - Complete)
+   ```go
+   Detector {
+     DetectAll(ctx) → ([]PackageInfo, error)  // Detect all LEMP packages
+   }
+   ```
+   - Scans system for installed packages: Nginx, MariaDB, Redis, PHP versions
+   - Uses dpkg-query for Ubuntu package status
+   - Dynamic PHP version detection from /etc/php/ filesystem scan
+   - Returns comprehensive package information with installed status and versions
+   - Used for system health checks and provisioning decisions
+
 1. **nginx/** (Phase 03 - Complete)
    ```go
    Manager {
@@ -567,6 +579,41 @@ Step 2: Restore database (if archive contains)
 - Archive permissions: 0600 (readable only by backup user)
 - Directory permissions: 0750
 - Timeout: 15 minutes for large sites
+
+## Package Detection Implementation (Phase 01)
+
+### Detection Strategy
+```
+System Package Detection
+    ↓
+Static Packages: Nginx, MariaDB, Redis (fixed list)
+    ↓
+dpkg-query for each package → [Installed, Version]
+    ↓
+Dynamic PHP: Scan /etc/php/ for versions (X.Y format)
+    ↓
+For each PHP version: Check php{version}-fpm package
+    ↓
+Return: Consolidated PackageInfo list
+```
+
+### Detection Methods
+- **dpkg-query**: Ubuntu package status and version
+  - Command: `dpkg-query -W --showformat='${Status}\n${Version}' {package}`
+  - Status validation: Must contain "install ok installed"
+  - Returns version if installed, empty string if not
+
+- **Filesystem Scan**: PHP version discovery
+  - Directory: `/etc/php/`
+  - Pattern: Version directories match X.Y (e.g., "8.3", "7.4")
+  - Creates PackageInfo for each detected version
+  - Validates directory name format strictly
+
+### Error Handling
+- dpkg-query failure → Package treated as not installed
+- /etc/php/ missing/unreadable → Returns PHP placeholder
+- Returns (false, "") for any package detection error
+- No exceptions thrown, graceful degradation
 
 ## Logging & Monitoring
 

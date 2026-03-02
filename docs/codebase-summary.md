@@ -44,6 +44,9 @@ juiscript/
 │   ├── backup/
 │   │   ├── manager.go          # Backup lifecycle (create/restore/list/delete/cleanup/cron)
 │   │   └── manager_test.go     # 34 unit tests
+│   ├── provisioner/
+│   │   ├── detector.go         # Package detection (Phase 01)
+│   │   └── detector_test.go    # 8 unit tests
 │   └── tui/
 │       ├── app.go              # Root model & screen router
 │       ├── components/
@@ -498,10 +501,12 @@ UserManager {
 
 ## Phase Completion Status
 
-**Phase 01 - Infrastructure**: Config, system abstractions, template engine, basic TUI, Service Status Bar component ✓
+**Phase 01 - Infrastructure & Package Detection**: Config, system abstractions, template engine, basic TUI, Service Status Bar component, Package Detector ✓
   - ServiceStatusBar (horizontal LEMP health indicator, 128 lines)
   - statusIndicator helper (shared with ServicePanel, 20 lines)
-  - 15 comprehensive unit tests
+  - 15 comprehensive unit tests for ServiceStatusBar
+  - Detector: Package detection for Nginx, MariaDB, Redis, PHP versions (148 lines)
+  - 8 unit tests for package detection (isInstalled, DetectAll, isVersionDir)
 **Phase 02 - Site Management**: Site lifecycle manager, site creation/deletion ✓
 **Phase 03 - Nginx/Vhost**: Manager CRUD, templates, TUI screen, enable/disable ✓
 **Phase 04 - PHP Management**: Version install/remove/list, FPM pool CRUD, version switch, TUI screen ✓
@@ -789,6 +794,64 @@ WorkerStatus {
 
 ### internal/backup/manager_test.go (34 unit tests)
 **Coverage**: Backup creation, restore, list, cleanup, cron setup, path validation, filename parsing
+
+### internal/provisioner/detector.go (148 lines) - Phase 01: Package Detection
+**Purpose**: System package detection for LEMP stack initialization
+- PackageInfo struct: Name, DisplayName, Package, Installed, Version
+- Detector struct: Wraps system.Executor for command abstraction
+- DetectAll(): Returns status for all LEMP packages (Nginx, MariaDB, Redis, PHP versions)
+
+**Key Methods**:
+- **isInstalled(ctx, pkg)**: Uses dpkg-query to check package status and retrieve version
+  - Parses dpkg output: Status line must contain "install ok installed"
+  - Returns (installed bool, version string)
+  - On error returns (false, "")
+- **detectPHPVersions()**: Scans /etc/php/ directory for installed PHP versions
+  - Validates directory names match X.Y format
+  - Reuses isVersionDir validation helper
+- **isVersionDir(name)**: Validates PHP version directory names (e.g., "8.3", "7.4")
+  - Strict validation: exactly 2 numeric parts separated by dot
+  - Rejects invalid formats: "", single numbers, decimals, non-numeric
+
+**Detection Logic**:
+- Static packages: Nginx, MariaDB, Redis (fixed list)
+- Dynamic PHP: Scans /etc/php/ for directories, one PackageInfo per detected version
+- Placeholder: If no PHP found, returns single "PHP" entry with Installed=false
+- All checks via dpkg-query for reliable Ubuntu package detection
+
+**Key Types**:
+```go
+PackageInfo {
+  Name string        // "nginx", "mariadb", "redis", "php"
+  DisplayName string // "Nginx", "MariaDB", "Redis", "PHP 8.3"
+  Package string     // apt package name or "" for PHP placeholder
+  Installed bool     // Detected via dpkg
+  Version string     // e.g. "1.24.0-2ubuntu1" or ""
+}
+```
+
+### internal/provisioner/detector_test.go (269 lines) - Phase 01
+**Purpose**: 8 comprehensive unit tests for package detection
+**Test Coverage**:
+1. **isInstalled tests** (3 tests):
+   - InstalledPackage: Parses version from dpkg output
+   - NotInstalled: Handles dpkg-query failure (package not found)
+   - BadStatus: Deinstalled/removed packages return installed=false
+2. **DetectAll tests** (4 tests):
+   - AllInstalled: All static packages detected + PHP placeholder
+   - NoneInstalled: All packages show Installed=false
+   - PartialInstall: Mixed installation state (nginx+redis, no mariadb)
+   - CorrectDisplayNames: Validates display name mapping (nginx→"Nginx", etc.)
+   - PHPPlaceholderWhenNotInstalled: Single "PHP" entry when no /etc/php/
+3. **isVersionDir tests** (1 test - table-driven):
+   - Valid: "8.3", "7.4", "8.0" → true
+   - Invalid: "", "8", "abc", "8.3.1", ".3", "8." → false
+
+**Mock Executor Pattern**:
+- Captures executed commands for verification
+- Supports configurable outputs per command
+- Supports configurable error injection per command
+- dpkgCmd() helper builds expected command strings for matching
 
 ### internal/tui/screens/backup.go (varies)
 **Purpose**: Backup management screen
