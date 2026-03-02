@@ -1,13 +1,25 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/service"
 	"github.com/jhin1m/juiscript/internal/tui/components"
 	"github.com/jhin1m/juiscript/internal/tui/screens"
 	"github.com/jhin1m/juiscript/internal/tui/theme"
 )
+
+// ServiceStatusMsg delivers fresh service statuses to the App.
+type ServiceStatusMsg struct {
+	Services []service.Status
+}
+
+// ServiceStatusErrMsg reports a failure to read service status.
+type ServiceStatusErrMsg struct {
+	Err error
+}
 
 // Screen identifies which screen is currently active.
 type Screen int
@@ -41,9 +53,11 @@ var screenNames = map[string]Screen{
 // App is the root Bubble Tea model.
 // It acts as a screen router, delegating to child models.
 type App struct {
-	theme       *theme.Theme
-	header      *components.Header
-	statusBar   *components.StatusBar
+	theme      *theme.Theme
+	header     *components.Header
+	statusBar  *components.StatusBar
+	serviceBar *components.ServiceStatusBar
+	svcMgr     *service.Manager
 	current     Screen
 	previous    Screen // for back navigation from sub-screens
 	dashboard   *screens.Dashboard
@@ -61,13 +75,16 @@ type App struct {
 }
 
 // NewApp creates the root TUI application.
-func NewApp() *App {
+// svcMgr can be nil — the service bar will show a warning gracefully.
+func NewApp(svcMgr *service.Manager) *App {
 	t := theme.New()
 
 	return &App{
-		theme:       t,
-		header:      components.NewHeader(t),
-		statusBar:   components.NewStatusBar(t),
+		theme:      t,
+		header:     components.NewHeader(t),
+		statusBar:  components.NewStatusBar(t),
+		serviceBar: components.NewServiceStatusBar(t),
+		svcMgr:     svcMgr,
 		current:     ScreenDashboard,
 		dashboard:   screens.NewDashboard(t),
 		siteList:    screens.NewSiteList(t),
@@ -83,7 +100,23 @@ func NewApp() *App {
 }
 
 func (a *App) Init() tea.Cmd {
-	return a.dashboard.Init()
+	return tea.Batch(a.dashboard.Init(), a.fetchServiceStatus())
+}
+
+// fetchServiceStatus returns a tea.Cmd that fetches service statuses asynchronously.
+func (a *App) fetchServiceStatus() tea.Cmd {
+	if a.svcMgr == nil {
+		return func() tea.Msg {
+			return ServiceStatusErrMsg{Err: fmt.Errorf("service manager not available")}
+		}
+	}
+	return func() tea.Msg {
+		statuses, err := a.svcMgr.ListAll(context.Background())
+		if err != nil {
+			return ServiceStatusErrMsg{Err: err}
+		}
+		return ServiceStatusMsg{Services: statuses}
+	}
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -93,7 +126,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.height = msg.Height
 		a.header.SetWidth(msg.Width)
 		a.statusBar.SetWidth(msg.Width)
+		a.serviceBar.SetWidth(msg.Width)
 		return a, a.updateActiveScreen(msg)
+
+	case ServiceStatusMsg:
+		a.serviceBar.SetServices(msg.Services)
+		return a, nil
+
+	case ServiceStatusErrMsg:
+		a.serviceBar.SetError(msg.Err.Error())
+		return a, nil
 
 	case tea.KeyMsg:
 		// Global quit: ctrl+c always quits
@@ -111,10 +153,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.previous = a.current
 			a.current = screen
 		}
-		return a, nil
+		return a, a.fetchServiceStatus()
 
 	case screens.GoBackMsg:
-		return a.goBack(), nil
+		return a.goBack(), a.fetchServiceStatus()
 
 	// Site-specific navigation messages
 	case screens.ShowCreateFormMsg:
@@ -182,22 +224,22 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// TODO: Call database manager to export
 		return a, nil
 
-	// Service screen messages
+	// Service screen messages — re-fetch status after each action
 	case screens.StartServiceMsg:
 		// TODO: Call service manager to start
-		return a, nil
+		return a, a.fetchServiceStatus()
 
 	case screens.StopServiceMsg:
 		// TODO: Call service manager to stop
-		return a, nil
+		return a, a.fetchServiceStatus()
 
 	case screens.RestartServiceMsg:
 		// TODO: Call service manager to restart
-		return a, nil
+		return a, a.fetchServiceStatus()
 
 	case screens.ReloadServiceMsg:
 		// TODO: Call service manager to reload
-		return a, nil
+		return a, a.fetchServiceStatus()
 
 	// Queue worker screen messages
 	case screens.StartWorkerMsg:
@@ -325,7 +367,8 @@ func (a *App) View() string {
 	bindings := a.currentBindings()
 	statusBar := a.statusBar.View(bindings)
 
-	return fmt.Sprintf("%s\n\n%s\n\n%s", header, content, statusBar)
+	svcBar := a.serviceBar.View()
+	return fmt.Sprintf("%s\n%s\n\n%s\n\n%s", header, svcBar, content, statusBar)
 }
 
 func (a *App) screenTitle() string {

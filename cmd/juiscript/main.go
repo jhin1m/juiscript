@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/service"
+	"github.com/jhin1m/juiscript/internal/system"
 	"github.com/jhin1m/juiscript/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -33,7 +36,10 @@ func main() {
 
 // runTUI launches the Bubble Tea TUI application.
 func runTUI(cmd *cobra.Command, args []string) error {
-	app := tui.NewApp()
+	logger := slog.Default()
+	exec := system.NewExecutor(logger)
+	svcMgr := service.NewManager(exec)
+	app := tui.NewApp(svcMgr)
 
 	// tea.WithAltScreen uses the alternate terminal buffer
 	// so the TUI doesn't mess up your terminal history

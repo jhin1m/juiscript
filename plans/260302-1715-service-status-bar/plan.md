@@ -1,7 +1,7 @@
 ---
 title: "Service Status Bar"
 description: "Persistent horizontal bar showing LEMP service health below header on all TUI screens"
-status: pending
+status: completed
 priority: P2
 effort: 3h
 branch: main
@@ -28,8 +28,8 @@ Green=active, Red=failed, Gray=inactive. Memory shown only for active services.
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | ServiceStatusBar Component | [phase-01](phase-01-service-status-bar-component.md) | done (2026-03-02) |
-| 2 | App Integration | [phase-02](phase-02-app-integration.md) | pending |
-| 3 | Testing | [phase-03](phase-03-testing.md) | pending |
+| 2 | App Integration | [phase-02](phase-02-app-integration.md) | done (2026-03-02) |
+| 3 | Testing | [phase-03](phase-03-testing.md) | done (2026-03-02) |
 
 ## Files Changed
 

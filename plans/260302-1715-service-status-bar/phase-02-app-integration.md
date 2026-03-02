@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "App Integration"
-status: pending
+status: done
 effort: 1.5h
 ---
 
@@ -20,7 +20,7 @@ effort: 1.5h
 | Date | 2026-03-02 |
 | Description | Wire ServiceStatusBar into App model; inject service.Manager; handle async fetch |
 | Priority | P2 |
-| Impl Status | pending |
+| Impl Status | done |
 | Review Status | pending |
 
 ## Key Insights

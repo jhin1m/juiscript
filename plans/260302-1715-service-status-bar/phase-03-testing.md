@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Testing"
-status: pending
+status: done
 effort: 0.5h
 ---
 
@@ -20,7 +20,7 @@ effort: 0.5h
 | Date | 2026-03-02 |
 | Description | Unit tests for ServiceStatusBar component + regression check |
 | Priority | P2 |
-| Impl Status | pending |
+| Impl Status | done |
 | Review Status | pending |
 
 ## Key Insights
