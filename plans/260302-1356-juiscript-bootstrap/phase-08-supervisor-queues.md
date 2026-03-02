@@ -6,7 +6,8 @@ Laravel queue worker management via Supervisor. Each Laravel site can have one o
 ## Overview
 - **Effort**: 3h
 - **Priority**: P3
-- **Status**: pending
+- **Status**: DONE
+- **Completed**: 2026-03-02
 - **Depends on**: Phase 01, Phase 02
 
 ## Key Insights
@@ -99,13 +100,13 @@ templates/supervisor-worker.conf.tmpl
 9. **Integration with site creation**: Optionally create worker during Laravel site setup
 
 ## Todo
-- [ ] Supervisor worker template
-- [ ] Manager CRUD
-- [ ] Start/Stop/Restart via supervisorctl
-- [ ] Status parsing
-- [ ] TUI supervisor screen
-- [ ] Integration with site create flow
-- [ ] Tests
+- [x] Supervisor worker template
+- [x] Manager CRUD
+- [x] Start/Stop/Restart via supervisorctl
+- [x] Status parsing
+- [x] TUI supervisor screen
+- [x] Integration with site create flow
+- [x] Tests
 
 ## Success Criteria
 - Creating a worker starts a running Supervisor process

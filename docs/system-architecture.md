@@ -172,12 +172,29 @@ Three core interfaces for testability (no root in tests):
    - Memory usage and PID tracking
    - Graceful reload support (nginx, php-fpm)
 
+8. **supervisor/** (Phase 08 - Complete)
+   ```go
+   Manager {
+     Create(ctx, cfg WorkerConfig) error    // Render template, write config, reload
+     Delete(ctx, domain string) error       // Remove config, reload
+     Start(ctx, domain string) error        // Start worker processes
+     Stop(ctx, domain string) error         // Stop worker processes
+     Restart(ctx, domain string) error      // Restart worker processes
+     Status(ctx, domain string) (*WorkerStatus, error) // Worker state & uptime
+     ListAll(ctx) ([]WorkerStatus, error)   // All workers status
+   }
+   ```
+   - Supervisor-managed Laravel queue workers
+   - Per-site configuration with supervisorctl automation
+   - Worker process management and monitoring
+   - Uptime tracking and state reporting
+   - Atomic config writes with rollback on reload failure
+
 **Planned Packages**:
 
 - **database/**: MariaDB user/database operations
 - **ssl/**: Let's Encrypt integration via certbot
 - **backup/**: Full/partial backups, retention, restore
-- **supervisor/**: Queue worker management
 
 ## Data Flow
 
@@ -381,6 +398,11 @@ Templates (Embedded):
 │   - Security: open_basedir, upload restrictions, extension limits
 │   - Logging: php-error.log per site
 └── supervisor-worker.conf.tmpl  ← Queue worker process management
+    - Program name per site domain
+    - Multiple process instances with supervisor group notation
+    - Graceful shutdown timeout (MaxTime + 60s buffer)
+    - Connection type: redis/database/sqs
+    - Queue name and retry/sleep configuration
 ```
 
 ## Scalability Considerations
@@ -421,6 +443,45 @@ Templates (Embedded):
 - Config load/save: < 10ms
 - Site creation: < 10s (depends on system)
 - Binary size: ~50MB (statically compiled)
+
+## Supervisor Queue Worker Implementation (Phase 08)
+
+### Worker Configuration Flow
+```
+WorkerConfig {Domain, Username, SitePath, PHPBinary, Connection, Queue, Processes, Tries, MaxTime, Sleep}
+    ↓
+applyDefaults (Connection: redis, Queue: default, Processes: 1, etc.)
+    ↓
+templateData mapping → supervisor-worker.conf.tmpl
+    ↓
+supervisorctl reread + update
+    ↓
+Processes started/managed by Supervisor
+```
+
+### Configuration Path
+- File: `/etc/supervisor/conf.d/{domain}-worker.conf`
+- Program name: `{domain}-worker`
+- Processes: `{domain}-worker:00`, `{domain}-worker:01`, etc. (group notation)
+- Graceful shutdown: MaxTime + 60 seconds buffer
+
+### Worker State Management
+- **RUNNING**: Process active and healthy
+- **STOPPED**: Process manually stopped or removed config
+- **FATAL**: Process failed repeatedly (exceeded retry limit)
+- **STARTING**: Process initializing (transient state)
+
+### Status Parsing
+- Parses `supervisorctl status` output
+- Extracts: program name, state, PID, uptime (H:MM:SS format)
+- Uptime conversion: Hours + Minutes + Seconds → time.Duration
+- Multi-process workers: Returns first process as representative
+
+### Integration with TUI
+- QueuesScreen displays workers in table: NAME | STATE | PID | UPTIME
+- Color-coded states: RUNNING (green), FATAL (red), STOPPED (yellow)
+- Actions: start, stop, restart, delete
+- Reload timing: ~2s for supervisor to apply changes
 
 ## Logging & Monitoring
 

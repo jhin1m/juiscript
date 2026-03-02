@@ -38,6 +38,9 @@ juiscript/
 │   │   └── manager_test.go     # Unit tests
 │   ├── nginx/ssl-operations.go # EnableSSL/DisableSSL vhost operations
 │   ├── nginx/ssl-operations_test.go # Tests
+│   ├── supervisor/
+│   │   ├── manager.go          # Queue worker lifecycle (create/delete/start/stop/status)
+│   │   └── manager_test.go     # Unit tests
 │   └── tui/
 │       ├── app.go              # Root model & screen router
 │       ├── components/
@@ -49,7 +52,9 @@ juiscript/
 │           ├── dashboard.go    # Dashboard screen
 │           ├── nginx.go        # Nginx vhost management screen
 │           ├── php.go          # PHP version management screen
-│           └── database.go     # Database management screen
+│           ├── database.go     # Database management screen
+│           ├── queues.go       # Queue worker management screen (Phase 08)
+│           └── services.go     # Service control screen
 ├── templates/
 │   ├── nginx-laravel.conf.tmpl     # Laravel vhost template
 │   ├── nginx-wordpress.conf.tmpl   # WordPress vhost template
@@ -469,6 +474,7 @@ UserManager {
 **Phase 05 - Database Management**: Manager CRUD, user ops, import/export, TUI screen, 20 unit tests ✓
 **Phase 06 - SSL Management**: Certbot automation, Nginx SSL injection, TUI screen, full unit tests ✓
 **Phase 07 - Service Control**: Systemctl wrapper, start/stop/restart/reload/status/health, TUI screen, 16 unit tests ✓
+**Phase 08 - Supervisor/Queue Workers**: Worker lifecycle, template full params, TUI screen, supervisorctl integration ✓
 
 ## Service Control Implementation Details (Phase 07)
 
@@ -633,10 +639,67 @@ Status {
 - Path Traversal: Rejected via validation before passing to commands
 - Command Injection: Input validation prevents shell metacharacters
 
+### internal/supervisor/manager.go (368 lines)
+**Purpose**: Supervisor queue worker lifecycle management
+- WorkerConfig struct: Domain, Username, SitePath, PHPBinary, Connection, Queue, Processes, Tries, MaxTime, Sleep
+- applyDefaults: Sensible defaults (redis, default queue, 1 process, 3 tries, 3600s max-time, 3s sleep)
+- Create: Renders supervisor-worker template, writes atomically, reloads (rollback on failure)
+- Delete: Removes config, reloads (idempotent)
+- Start/Stop/Restart: Control worker processes via supervisorctl
+- Status: Parses supervisorctl output for state, PID, uptime
+- ListAll: Enumerate all managed workers
+- reload: Executes reread + update for config discovery and application
+- Validation: Domain (DNS chars), processes (≤8), required fields
+
+**Key Types**:
+```go
+WorkerConfig {
+  Domain, Username, SitePath, PHPBinary
+  Connection (redis/database/sqs), Queue, Processes, Tries, MaxTime, Sleep
+}
+
+WorkerStatus {
+  Name string           // program name (e.g., "example.com-worker")
+  State string          // RUNNING, STOPPED, FATAL, STARTING, etc.
+  PID int               // process ID
+  Uptime time.Duration  // how long running
+}
+```
+
+**Supervisor Template Parameters** (supervisor-worker.conf.tmpl):
+- ProgramName: e.g., "example.com-worker"
+- ArtisanPath: Full path to artisan executable
+- Connection: Queue connection type
+- Queue: Queue name
+- MaxTries: Retry attempts
+- MaxTime: Seconds before restart
+- Sleep: Seconds between failed job polls
+- User: Linux user running worker
+- NumProcs: Number of parallel processes
+- PHPBinary: PHP version binary path
+- StopWaitSecs: Graceful shutdown timeout (MaxTime + 60s buffer)
+
+### internal/tui/screens/queues.go (174 lines)
+**Purpose**: Queue worker management screen
+- List workers with state, PID, uptime in table format
+- Cursor selection: 'k'/'j' navigate, 's' start, 'x' stop, 'r' restart, 'd' delete
+- Color-coded state: RUNNING (green), FATAL (red), STOPPED (yellow)
+- Uptime formatting: "Xh Ym" or "Xm Ys"
+- Messages: StartWorkerMsg, StopWorkerMsg, RestartWorkerMsg, DeleteWorkerMsg
+- Empty state handling with help text
+- Error display
+- Escape to go back to dashboard
+
+**Screen Title**: Queues
+
+### internal/tui/theme/theme.go (UPDATED)
+**Addition**: WarnText style for warning states (amber color)
+- Used by QueuesScreen for STOPPED worker display
+- Consistent with existing theme palette
+
 ## Future Additions
 
 - Backup scheduling & execution
-- Supervisor queue worker management
 - Service control screens (stop/start/restart)
 - System monitoring and health checks
 - Wildcard certificate support

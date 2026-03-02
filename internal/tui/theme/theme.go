@@ -36,6 +36,7 @@ type Theme struct {
 	Active    lipgloss.Style
 	Inactive  lipgloss.Style
 	ErrorText lipgloss.Style
+	WarnText  lipgloss.Style
 	OkText    lipgloss.Style
 	HelpKey   lipgloss.Style
 	HelpDesc  lipgloss.Style
@@ -77,6 +78,9 @@ func New() *Theme {
 
 		ErrorText: lipgloss.NewStyle().
 			Foreground(Error),
+
+		WarnText: lipgloss.NewStyle().
+			Foreground(Warning),
 
 		OkText: lipgloss.NewStyle().
 			Foreground(Success),

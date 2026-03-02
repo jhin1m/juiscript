@@ -54,6 +54,7 @@ type App struct {
 	phpScreen        *screens.PHPScreen
 	databaseScreen   *screens.DatabaseScreen
 	servicesScreen   *screens.ServicesScreen
+	queuesScreen     *screens.QueuesScreen
 	width            int
 	height           int
 }
@@ -75,6 +76,7 @@ func NewApp() *App {
 		phpScreen:      screens.NewPHPScreen(t),
 		databaseScreen: screens.NewDatabaseScreen(t),
 		servicesScreen: screens.NewServicesScreen(t),
+		queuesScreen:   screens.NewQueuesScreen(t),
 	}
 }
 
@@ -194,6 +196,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.ReloadServiceMsg:
 		// TODO: Call service manager to reload
 		return a, nil
+
+	// Queue worker screen messages
+	case screens.StartWorkerMsg:
+		// TODO: Call supervisor manager to start worker
+		return a, nil
+
+	case screens.StopWorkerMsg:
+		// TODO: Call supervisor manager to stop worker
+		return a, nil
+
+	case screens.RestartWorkerMsg:
+		// TODO: Call supervisor manager to restart worker
+		return a, nil
+
+	case screens.DeleteWorkerMsg:
+		// TODO: Call supervisor manager to delete worker
+		return a, nil
 	}
 
 	// Delegate to active screen
@@ -244,6 +263,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.servicesScreen.Update(msg)
 		a.servicesScreen = updated.(*screens.ServicesScreen)
 		return cmd
+	case ScreenQueues:
+		updated, cmd := a.queuesScreen.Update(msg)
+		a.queuesScreen = updated.(*screens.QueuesScreen)
+		return cmd
 	default:
 		return nil
 	}
@@ -270,6 +293,8 @@ func (a *App) View() string {
 		content = a.databaseScreen.View()
 	case ScreenServices:
 		content = a.servicesScreen.View()
+	case ScreenQueues:
+		content = a.queuesScreen.View()
 	default:
 		content = a.theme.Subtitle.Render(
 			fmt.Sprintf("\n  [%s] screen - Coming soon...\n\n  Press 'esc' to go back",
@@ -348,6 +373,15 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "x", Desc: "stop"},
 			{Key: "r", Desc: "restart"},
 			{Key: "l", Desc: "reload"},
+			{Key: "esc", Desc: "back"},
+		}, base...)
+	case ScreenQueues:
+		return append([]components.KeyBinding{
+			{Key: "j/k", Desc: "navigate"},
+			{Key: "s", Desc: "start"},
+			{Key: "x", Desc: "stop"},
+			{Key: "r", Desc: "restart"},
+			{Key: "d", Desc: "delete"},
 			{Key: "esc", Desc: "back"},
 		}, base...)
 	default:

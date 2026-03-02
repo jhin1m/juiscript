@@ -31,7 +31,7 @@ Go CLI + Bubble Tea TUI for LEMP server management (Nginx, PHP-FPM, MariaDB, Red
 | 5 | Database Management | 4h | done | [phase-05](phase-05-database-management.md) |
 | 6 | SSL Management | 3h | done | [phase-06](phase-06-ssl-management.md) |
 | 7 | Service Control | 3h | pending | [phase-07](phase-07-service-control.md) |
-| 8 | Supervisor/Queues | 3h | pending | [phase-08](phase-08-supervisor-queues.md) |
+| 8 | Supervisor/Queues | 3h | done | [phase-08](phase-08-supervisor-queues.md) |
 | 9 | Backup System | 4h | pending | [phase-09](phase-09-backup-system.md) |
 
 ## Key Decisions

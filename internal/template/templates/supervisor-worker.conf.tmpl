@@ -1,12 +1,13 @@
 {{/* Supervisor queue worker for Laravel sites */}}
 [program:{{ .ProgramName }}]
-command=php {{ .ArtisanPath }} queue:work {{ .Connection }} --sleep=3 --tries={{ .MaxTries }} --max-time=3600
 process_name=%(program_name)s_%(process_num)02d
+command={{ .PHPBinary }} {{ .ArtisanPath }} queue:work {{ .Connection }} --queue={{ .Queue }} --sleep={{ .Sleep }} --tries={{ .MaxTries }} --max-time={{ .MaxTime }}
 autostart=true
 autorestart=true
+stopasgroup=true
+killasgroup=true
 user={{ .User }}
 numprocs={{ .NumProcs }}
-startsecs=0
-stopwaitsecs=3600
-stdout_logfile=/home/{{ .User }}/logs/queue-worker.log
 redirect_stderr=true
+stdout_logfile=/home/{{ .User }}/logs/queue-worker.log
+stopwaitsecs={{ .StopWaitSecs }}
