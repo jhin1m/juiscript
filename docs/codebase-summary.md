@@ -33,6 +33,11 @@ juiscript/
 │   │   ├── user-operations.go  # CreateUser/DropUser/ResetPassword
 │   │   ├── import-export.go    # Import/Export with streaming
 │   │   └── manager_test.go     # 20 unit tests
+│   ├── ssl/
+│   │   ├── manager.go          # Let's Encrypt automation via certbot
+│   │   └── manager_test.go     # Unit tests
+│   ├── nginx/ssl-operations.go # EnableSSL/DisableSSL vhost operations
+│   ├── nginx/ssl-operations_test.go # Tests
 │   └── tui/
 │       ├── app.go              # Root model & screen router
 │       ├── components/
@@ -295,6 +300,66 @@ Manager {
 - Messages: CreateDBMsg, DropDBMsg, ImportDBMsg, ExportDBMsg for app routing
 - Empty state with help text
 
+### internal/ssl/manager.go (291 lines)
+**Purpose**: Let's Encrypt SSL certificate automation via certbot
+- Manager struct: wraps Executor, Nginx Manager, FileManager
+- Obtain(): Requests cert via certbot webroot, updates Nginx vhost with SSL directives, reloads
+- Revoke(): Revokes cert, deletes certbot files, disables SSL in vhost
+- Renew(): Forces certificate renewal
+- Status(): Parses certificate with openssl, returns expiry/issuer/validity
+- ListCerts(): Parses certbot output for all managed certificates
+- Validation: validateDomain (DNS chars only), validateEmail (basic format check)
+- Certificate parsing: Handles openssl x509 output and certbot certificates listing
+
+**Key Types**:
+```go
+CertInfo {
+  Domain   string      // Certificate domain
+  Expiry   time.Time   // Certificate expiration datetime
+  Issuer   string      // Issuer CN (e.g., "Let's Encrypt")
+  Valid    bool        // Current validity status
+  DaysLeft int         // Days until expiration
+}
+
+Manager {
+  executor system.Executor
+  nginx    *nginx.Manager
+  files    system.FileManager
+}
+```
+
+### internal/nginx/ssl-operations.go (202 lines)
+**Purpose**: Nginx vhost SSL enable/disable operations
+- EnableSSL(): Injects SSL directives, prepends HTTP-to-HTTPS redirect block
+- DisableSSL(): Removes SSL sections from vhost config
+- injectSSLDirectives(): Adds listen 443, certificate paths, TLS settings, OCSP stapling
+- buildRedirectBlock(): Creates server block for HTTP→HTTPS redirect with ACME challenge support
+- removeSSLSections(): Uses marker comments to cleanly strip SSL config
+- Atomic with rollback: Tests config and restores original on failure
+
+**SSL Markers for Clean Injection**:
+```
+# BEGIN SSL REDIRECT ... # END SSL REDIRECT
+# BEGIN SSL ... # END SSL
+```
+
+**TLS Configuration Injected**:
+- Protocols: TLSv1.2, TLSv1.3
+- Ciphers: ECDHE-ECDSA-AES128/256-GCM-SHA256/384, ECDHE-RSA-AES128/256-GCM-SHA256/384
+- OCSP stapling enabled
+- HSTS header available (commented, require manual activation)
+
+### internal/tui/screens/ssl.go (165 lines)
+**Purpose**: TUI screen for SSL certificate management
+- Displays certificates in table: DOMAIN | DAYS LEFT | STATUS | ISSUER
+- Keyboard: 'k'/'j' navigate, 'o' obtain, 'r' revoke, 'f' force-renew, 'esc' back
+- Color-coded status: VALID (green), EXPIRING (yellow, ≤30 days), CRITICAL (red, ≤7 days), EXPIRED (red)
+- Messages: ObtainCertMsg, RevokeCertMsg, RenewCertMsg for app routing
+- Empty state with obtain hint
+- Cursor selection and error display
+
+**Screen Title**: SSL
+
 ### Makefile (50 lines)
 **Purpose**: Build automation
 - build: Current platform
@@ -402,6 +467,7 @@ UserManager {
 **Phase 03 - Nginx/Vhost**: Manager CRUD, templates, TUI screen, enable/disable ✓
 **Phase 04 - PHP Management**: Version install/remove/list, FPM pool CRUD, version switch, TUI screen ✓
 **Phase 05 - Database Management**: Manager CRUD, user ops, import/export, TUI screen, 20 unit tests ✓
+**Phase 06 - SSL Management**: Certbot automation, Nginx SSL injection, TUI screen, full unit tests ✓
 
 ## PHP Management Implementation Details
 
@@ -453,10 +519,45 @@ UserManager {
 - **Table Count**: Per-database table enumeration
 - **System DB Filtering**: Automatic exclusion in ListDBs output
 
+## SSL Management Implementation Details
+
+### Certificate Operations
+- **Obtain**: Uses certbot webroot method for ACME challenge validation, then injects SSL into Nginx vhost
+- **Revoke**: Revokes cert via certbot, deletes certbot files, removes SSL from vhost
+- **Renew**: Forces certificate renewal (useful before auto-renewal)
+- **Status**: Parses openssl x509 output to extract expiry, issuer, validity
+- **List**: Parses certbot certificates output for all managed certs
+
+### Certbot Configuration
+- Method: `--webroot` for zero-downtime validation (no port 80/443 temporarily required)
+- Options: `--non-interactive`, `--agree-tos` for automation
+- Certificate path: `/etc/letsencrypt/live/{domain}/`
+- Email: Required for ACME registration and expiry notifications
+
+### Nginx SSL Injection
+- **Location**: Inserts after "listen [::]:80;" line in vhost config
+- **Redirect Block**: Prepended to vhost, handles HTTP→HTTPS with ACME challenge path exception
+- **Markers**: Uses comments (# BEGIN SSL, # END SSL) for clean removal without parsing
+- **Atomic**: Writes atomically, tests config, rolls back if `nginx -t` fails
+- **TLS Version**: TLSv1.2 and TLSv1.3 only (no TLSv1.0/1.1)
+- **OCSP Stapling**: Enabled for performance, requires resolver configuration
+
+### Certificate Status Colors
+- **VALID** (Green): Expires in >30 days
+- **EXPIRING** (Yellow): Expires in 8-30 days
+- **CRITICAL** (Red): Expires in ≤7 days
+- **EXPIRED** (Red): Already expired
+
+### Security Validations
+- Domain: Allows only letters, digits, dots, hyphens (DNS-valid)
+- Email: Requires @ symbol, allows alphanumeric, dots, hyphens, underscores, plus
+- Path Traversal: Rejected via validation before passing to commands
+- Command Injection: Input validation prevents shell metacharacters
+
 ## Future Additions
 
-- SSL certificate automation via certbot
 - Backup scheduling & execution
 - Supervisor queue worker management
 - Service control screens (stop/start/restart)
 - System monitoring and health checks
+- Wildcard certificate support

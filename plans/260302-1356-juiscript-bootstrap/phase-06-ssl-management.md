@@ -6,7 +6,7 @@ Let's Encrypt SSL certificate management via certbot. Automates obtaining, renew
 ## Overview
 - **Effort**: 3h
 - **Priority**: P2
-- **Status**: pending
+- **Status**: done
 - **Depends on**: Phase 01, Phase 03
 
 ## Key Insights
@@ -94,14 +94,14 @@ templates/nginx-ssl-redirect.conf.tmpl
 9. **TUI SSL screen**: List certs with expiry, status (valid/expiring/expired), obtain/revoke actions
 
 ## Todo
-- [ ] SSL Manager with certbot wrapper
-- [ ] Obtain with webroot method
-- [ ] Revoke and renew
-- [ ] Cert status parsing
-- [ ] SSL Nginx templates
-- [ ] Vhost update for SSL
-- [ ] TUI SSL screen
-- [ ] Tests
+- [x] SSL Manager with certbot wrapper
+- [x] Obtain with webroot method
+- [x] Revoke and renew
+- [x] Cert status parsing
+- [x] SSL Nginx templates
+- [x] Vhost update for SSL
+- [x] TUI SSL screen
+- [x] Tests
 
 ## Success Criteria
 - Obtain cert for a domain, Nginx serves HTTPS afterward
