@@ -51,10 +51,11 @@ type App struct {
 	siteCreate  *screens.SiteCreate
 	siteDetail  *screens.SiteDetail
 	nginxScreen *screens.NginxScreen
-	phpScreen      *screens.PHPScreen
-	databaseScreen *screens.DatabaseScreen
-	width          int
-	height         int
+	phpScreen        *screens.PHPScreen
+	databaseScreen   *screens.DatabaseScreen
+	servicesScreen   *screens.ServicesScreen
+	width            int
+	height           int
 }
 
 // NewApp creates the root TUI application.
@@ -73,6 +74,7 @@ func NewApp() *App {
 		nginxScreen: screens.NewNginxScreen(t),
 		phpScreen:      screens.NewPHPScreen(t),
 		databaseScreen: screens.NewDatabaseScreen(t),
+		servicesScreen: screens.NewServicesScreen(t),
 	}
 }
 
@@ -175,6 +177,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.ExportDBMsg:
 		// TODO: Call database manager to export
 		return a, nil
+
+	// Service screen messages
+	case screens.StartServiceMsg:
+		// TODO: Call service manager to start
+		return a, nil
+
+	case screens.StopServiceMsg:
+		// TODO: Call service manager to stop
+		return a, nil
+
+	case screens.RestartServiceMsg:
+		// TODO: Call service manager to restart
+		return a, nil
+
+	case screens.ReloadServiceMsg:
+		// TODO: Call service manager to reload
+		return a, nil
 	}
 
 	// Delegate to active screen
@@ -221,6 +240,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.databaseScreen.Update(msg)
 		a.databaseScreen = updated.(*screens.DatabaseScreen)
 		return cmd
+	case ScreenServices:
+		updated, cmd := a.servicesScreen.Update(msg)
+		a.servicesScreen = updated.(*screens.ServicesScreen)
+		return cmd
 	default:
 		return nil
 	}
@@ -245,6 +268,8 @@ func (a *App) View() string {
 		content = a.phpScreen.View()
 	case ScreenDatabase:
 		content = a.databaseScreen.View()
+	case ScreenServices:
+		content = a.servicesScreen.View()
 	default:
 		content = a.theme.Subtitle.Render(
 			fmt.Sprintf("\n  [%s] screen - Coming soon...\n\n  Press 'esc' to go back",
@@ -314,6 +339,15 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "d", Desc: "drop"},
 			{Key: "i", Desc: "import"},
 			{Key: "e", Desc: "export"},
+			{Key: "esc", Desc: "back"},
+		}, base...)
+	case ScreenServices:
+		return append([]components.KeyBinding{
+			{Key: "j/k", Desc: "navigate"},
+			{Key: "s", Desc: "start"},
+			{Key: "x", Desc: "stop"},
+			{Key: "r", Desc: "restart"},
+			{Key: "l", Desc: "reload"},
 			{Key: "esc", Desc: "back"},
 		}, base...)
 	default:

@@ -19,7 +19,7 @@ internal/
   database/             MariaDB operations (future)
   ssl/                  Let's Encrypt automation (future)
   backup/               Backup & restore (future)
-  service/              Systemd service control (future)
+  service/              Systemd service control
 templates/              Embedded config templates (.tmpl)
 ```
 

@@ -6,7 +6,7 @@ Unified interface for managing LEMP stack services (Nginx, PHP-FPM, MariaDB, Red
 ## Overview
 - **Effort**: 3h
 - **Priority**: P2
-- **Status**: pending
+- **Status**: done
 - **Depends on**: Phase 01
 
 ## Key Insights
@@ -84,14 +84,14 @@ internal/tui/components/servicepanel.go   # reusable status panel for dashboard
 9. **PHP-FPM version detection**: Scan `/etc/php/` for installed versions
 
 ## Todo
-- [ ] Service manager with systemctl wrapper
-- [ ] Start/Stop/Restart/Reload
-- [ ] Status parsing from systemctl show
-- [ ] ListAll with auto-detection
-- [ ] HealthCheck
-- [ ] Service panel component for dashboard
-- [ ] TUI services screen
-- [ ] Tests
+- [x] Service manager with systemctl wrapper
+- [x] Start/Stop/Restart/Reload
+- [x] Status parsing from systemctl show
+- [x] ListAll with auto-detection
+- [x] HealthCheck
+- [x] Service panel component for dashboard
+- [x] TUI services screen
+- [x] Tests
 
 ## Success Criteria
 - Can start/stop/restart any LEMP service

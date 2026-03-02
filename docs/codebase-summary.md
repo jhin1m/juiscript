@@ -468,6 +468,85 @@ UserManager {
 **Phase 04 - PHP Management**: Version install/remove/list, FPM pool CRUD, version switch, TUI screen ✓
 **Phase 05 - Database Management**: Manager CRUD, user ops, import/export, TUI screen, 20 unit tests ✓
 **Phase 06 - SSL Management**: Certbot automation, Nginx SSL injection, TUI screen, full unit tests ✓
+**Phase 07 - Service Control**: Systemctl wrapper, start/stop/restart/reload/status/health, TUI screen, 16 unit tests ✓
+
+## Service Control Implementation Details (Phase 07)
+
+### Service Manager (internal/service/manager.go - 256 lines)
+**Purpose**: Systemd service control for LEMP stack
+- ServiceName type with whitelist (Nginx, MariaDB, Redis, PHP-FPM versions)
+- Manager struct wraps Executor for systemctl operations
+- Validation: Prevents arbitrary service names via allowedServices map + regex for PHP-FPM
+
+**Key Operations**:
+- **Start/Stop/Restart/Reload**: Execute systemctl actions with context
+- **IsActive**: Check if service is currently running (systemctl is-active)
+- **Status**: Detailed status parsing (state, substate, PID, memory in MB)
+- **ListAll**: Enumerate all LEMP services (static + dynamic PHP versions)
+- **IsHealthy**: Health check - verifies critical services (Nginx, MariaDB, PHP)
+
+**Service Discovery**:
+- Static: Nginx, MariaDB, Redis (always checked)
+- Dynamic: Scans /etc/php/ for installed PHP versions (e.g., "8.3", "7.4")
+- PHP-FPM service names auto-generated: PHPFPMService("8.3") → "php8.3-fpm"
+
+**Status Structure**:
+```go
+Status {
+  Name ServiceName       // e.g., "nginx", "php8.3-fpm"
+  Active bool            // state == "active"
+  State string           // "active", "inactive", "failed", "not-found"
+  SubState string        // "running", "dead", "exited"
+  PID int                // Main process ID (0 if stopped)
+  MemoryMB float64       // Converted from bytes via systemctl show
+}
+```
+
+**Security**: Whitelist-based validation prevents command injection
+
+### Service Manager Tests (internal/service/manager_test.go - 286 lines)
+**Coverage**: 16 test cases
+- isAllowed: Tests whitelist (nginx, mariadb, redis-server, php8.3-fpm, invalid services)
+- Start/Stop/Restart: Basic operation execution
+- Reload: Graceful reload signal (tested with php8.3-fpm)
+- Blocked services: Rejection of non-whitelisted services
+- Systemctl failure: Error handling and propagation
+- IsActive: True/false states and blocked service handling
+- Status parsing: Property extraction (ActiveState, SubState, MainPID, MemoryCurrent)
+- Inactive services: PID=0 and memory=0 handling
+- PHPFPMService: Service name generation for versions
+- isNumeric: Validation helper for version parsing
+
+### Services TUI Screen (internal/tui/screens/services.go - 183 lines)
+**Purpose**: Full-screen service management interface
+- Service list display with table: SERVICE | STATE | SUBSTATE | PID | MEMORY
+- Cursor selection with 'j'/'k' navigation
+- Action keys: 's' (start), 'x' (stop), 'r' (restart), 'l' (reload)
+- Color-coded states: active (green), failed (red), other (gray)
+- Empty state handling with help text
+- Error display and message routing
+
+**Screen Components**:
+- SetServices/SetError: Update displayed data
+- stateDisplay: Returns display string + style for service state
+- serviceCmd: Wraps tea.Msg into tea.Cmd for async execution
+- Messages: StartServiceMsg, StopServiceMsg, RestartServiceMsg, ReloadServiceMsg
+
+### Service Panel Component (internal/tui/components/servicepanel.go - 60 lines)
+**Purpose**: Compact service status overview for dashboard
+- Reusable component for dashboard integration
+- Shows service name + colored status indicator
+- Green dot (●) for active, red (●) for failed, hollow (○) for inactive
+- Minimal footprint for dashboard display
+- SetServices: Update service list
+
+### App Integration (internal/tui/app.go)
+**Changes**:
+- Added ScreenServices enum value
+- Added "Services": ScreenServices to screenNames map
+- Services screen instantiated and routed like other feature screens
+- Dashboard menu includes "Services" option
+- Service action messages integrated with app router
 
 ## PHP Management Implementation Details
 

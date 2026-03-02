@@ -153,12 +153,30 @@ Three core interfaces for testability (no root in tests):
    - Per-site user/group isolation
    - Security constraints (open_basedir, extension restrictions)
 
+7. **service/** (Phase 07 - Complete)
+   ```go
+   Manager {
+     Start(ctx, name ServiceName) error            // systemctl start
+     Stop(ctx, name ServiceName) error             // systemctl stop
+     Restart(ctx, name ServiceName) error          // systemctl restart
+     Reload(ctx, name ServiceName) error           // systemctl reload (graceful)
+     IsActive(ctx, name ServiceName) bool          // Check if running
+     Status(ctx, name ServiceName) (*Status, error) // Detailed status
+     ListAll(ctx) ([]Status, error)                // All LEMP services
+     IsHealthy(ctx) bool                           // Critical services check
+   }
+   ```
+   - Whitelist-based security (no shell injection)
+   - Dynamic PHP-FPM detection from /etc/php/
+   - Service health monitoring for app startup
+   - Memory usage and PID tracking
+   - Graceful reload support (nginx, php-fpm)
+
 **Planned Packages**:
 
 - **database/**: MariaDB user/database operations
 - **ssl/**: Let's Encrypt integration via certbot
 - **backup/**: Full/partial backups, retention, restore
-- **service/**: systemctl wrapper (Nginx, PHP-FPM, MariaDB, Redis)
 - **supervisor/**: Queue worker management
 
 ## Data Flow
