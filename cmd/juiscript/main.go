@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 
@@ -37,7 +38,23 @@ func main() {
 
 // runTUI launches the Bubble Tea TUI application.
 func runTUI(cmd *cobra.Command, args []string) error {
-	logger := slog.Default()
+	// Write logs to file instead of terminal to avoid breaking TUI display.
+	// Logs go to /var/log/juiscript.log for debugging, not stdout/stderr.
+	logFile, err := os.OpenFile("/var/log/juiscript.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		// Fallback: discard logs if we can't open log file (e.g. no permission)
+		logFile = nil
+	}
+
+	var logger *slog.Logger
+	if logFile != nil {
+		defer logFile.Close()
+		logger = slog.New(slog.NewTextHandler(logFile, nil))
+	} else {
+		// Discard logs silently when log file isn't available
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	exec := system.NewExecutor(logger)
 	svcMgr := service.NewManager(exec)
 	prov := provisioner.NewProvisioner(exec, nil) // PHP manager created later when needed
