@@ -1,7 +1,7 @@
 ---
 title: "Server Provisioner"
 description: "Auto-detect and install LEMP packages on fresh Ubuntu VPS via TUI checklist"
-status: pending
+status: done
 priority: P1
 effort: 6h
 branch: feat/server-provisioner
@@ -21,7 +21,7 @@ Auto-detect missing LEMP packages and install them via interactive TUI checklist
 | 02 | Package Installation | [phase-02-installation.md](phase-02-installation.md) | 1.5h | done |
 | 03 | Provisioner Orchestrator | [phase-03-orchestrator.md](phase-03-orchestrator.md) | 0.5h | done |
 | 04 | TUI Setup Screen | [phase-04-tui-setup.md](phase-04-tui-setup.md) | 2h | done |
-| 05 | App Integration | [phase-05-app-integration.md](phase-05-app-integration.md) | 1h | pending |
+| 05 | App Integration | [phase-05-app-integration.md](phase-05-app-integration.md) | 1h | done |
 
 ## Architecture
 

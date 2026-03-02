@@ -6,6 +6,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/provisioner"
 	"github.com/jhin1m/juiscript/internal/service"
 	"github.com/jhin1m/juiscript/internal/system"
 	"github.com/jhin1m/juiscript/internal/tui"
@@ -39,7 +40,8 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	logger := slog.Default()
 	exec := system.NewExecutor(logger)
 	svcMgr := service.NewManager(exec)
-	app := tui.NewApp(svcMgr)
+	prov := provisioner.NewProvisioner(exec, nil) // PHP manager created later when needed
+	app := tui.NewApp(svcMgr, prov)
 
 	// tea.WithAltScreen uses the alternate terminal buffer
 	// so the TUI doesn't mess up your terminal history

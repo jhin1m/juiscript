@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/provisioner"
 	"github.com/jhin1m/juiscript/internal/service"
 	"github.com/jhin1m/juiscript/internal/tui/components"
 	"github.com/jhin1m/juiscript/internal/tui/screens"
@@ -18,6 +19,16 @@ type ServiceStatusMsg struct {
 
 // ServiceStatusErrMsg reports a failure to read service status.
 type ServiceStatusErrMsg struct {
+	Err error
+}
+
+// DetectPackagesMsg carries the result of package detection on startup.
+type DetectPackagesMsg struct {
+	Packages []provisioner.PackageInfo
+}
+
+// DetectPackagesErrMsg reports a failure to detect packages.
+type DetectPackagesErrMsg struct {
 	Err error
 }
 
@@ -36,6 +47,7 @@ const (
 	ScreenServices
 	ScreenQueues
 	ScreenBackup
+	ScreenSetup
 )
 
 // screenNames maps screen titles to Screen enum.
@@ -48,6 +60,7 @@ var screenNames = map[string]Screen{
 	"Services": ScreenServices,
 	"Queues":   ScreenQueues,
 	"Backup":   ScreenBackup,
+	"Setup":    ScreenSetup,
 }
 
 // App is the root Bubble Tea model.
@@ -58,6 +71,7 @@ type App struct {
 	statusBar  *components.StatusBar
 	serviceBar *components.ServiceStatusBar
 	svcMgr     *service.Manager
+	prov       *provisioner.Provisioner
 	current     Screen
 	previous    Screen // for back navigation from sub-screens
 	dashboard   *screens.Dashboard
@@ -70,13 +84,15 @@ type App struct {
 	servicesScreen   *screens.ServicesScreen
 	queuesScreen     *screens.QueuesScreen
 	backupScreen     *screens.BackupScreen
+	setupScreen      *screens.SetupScreen
+	setupProgressCh  chan provisioner.ProgressEvent // nil when not installing
 	width            int
 	height           int
 }
 
 // NewApp creates the root TUI application.
-// svcMgr can be nil — the service bar will show a warning gracefully.
-func NewApp(svcMgr *service.Manager) *App {
+// svcMgr and prov can be nil — graceful degradation.
+func NewApp(svcMgr *service.Manager, prov *provisioner.Provisioner) *App {
 	t := theme.New()
 
 	return &App{
@@ -85,6 +101,7 @@ func NewApp(svcMgr *service.Manager) *App {
 		statusBar:  components.NewStatusBar(t),
 		serviceBar: components.NewServiceStatusBar(t),
 		svcMgr:     svcMgr,
+		prov:       prov,
 		current:     ScreenDashboard,
 		dashboard:   screens.NewDashboard(t),
 		siteList:    screens.NewSiteList(t),
@@ -96,11 +113,12 @@ func NewApp(svcMgr *service.Manager) *App {
 		servicesScreen: screens.NewServicesScreen(t),
 		queuesScreen:   screens.NewQueuesScreen(t),
 		backupScreen:   screens.NewBackupScreen(t),
+		setupScreen:    screens.NewSetupScreen(t),
 	}
 }
 
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(a.dashboard.Init(), a.fetchServiceStatus())
+	return tea.Batch(a.dashboard.Init(), a.fetchServiceStatus(), a.detectPackages())
 }
 
 // fetchServiceStatus returns a tea.Cmd that fetches service statuses asynchronously.
@@ -116,6 +134,32 @@ func (a *App) fetchServiceStatus() tea.Cmd {
 			return ServiceStatusErrMsg{Err: err}
 		}
 		return ServiceStatusMsg{Services: statuses}
+	}
+}
+
+// detectPackages runs package detection asynchronously on startup.
+func (a *App) detectPackages() tea.Cmd {
+	if a.prov == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		pkgs, err := a.prov.DetectAll(context.Background())
+		if err != nil {
+			return DetectPackagesErrMsg{Err: err}
+		}
+		return DetectPackagesMsg{Packages: pkgs}
+	}
+}
+
+// waitForProgress reads the next progress event from the channel.
+// Returns SetupDoneMsg when channel is closed (install complete).
+func waitForProgress(ch <-chan provisioner.ProgressEvent) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return screens.SetupDoneMsg{}
+		}
+		return screens.SetupProgressMsg{Event: ev}
 	}
 }
 
@@ -135,6 +179,22 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ServiceStatusErrMsg:
 		a.serviceBar.SetError(msg.Err.Error())
+		return a, nil
+
+	case DetectPackagesMsg:
+		// Cache detection results, update dashboard + setup screen
+		missing := 0
+		for _, pkg := range msg.Packages {
+			if !pkg.Installed {
+				missing++
+			}
+		}
+		a.dashboard.SetMissingCount(missing)
+		a.setupScreen.SetPackages(msg.Packages)
+		return a, nil
+
+	case DetectPackagesErrMsg:
+		// Silently ignore — setup screen remains empty
 		return a, nil
 
 	case tea.KeyMsg:
@@ -157,6 +217,31 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.GoBackMsg:
 		return a.goBack(), a.fetchServiceStatus()
+
+	// --- Setup/Provisioner messages ---
+
+	case screens.RunSetupMsg:
+		// Start install: create channel, spawn goroutine
+		ch := make(chan provisioner.ProgressEvent, 10)
+		a.setupProgressCh = ch
+		go func() {
+			a.prov.InstallSelected(context.Background(), msg.Names, func(ev provisioner.ProgressEvent) {
+				ch <- ev
+			})
+			close(ch)
+		}()
+		return a, waitForProgress(ch)
+
+	case screens.SetupProgressMsg:
+		// Forward to setup screen, then continue listening
+		a.setupScreen.Update(msg)
+		return a, waitForProgress(a.setupProgressCh)
+
+	case screens.SetupDoneMsg:
+		// Forward to setup screen, clean up channel, re-detect
+		a.setupScreen.Update(msg)
+		a.setupProgressCh = nil
+		return a, tea.Batch(a.detectPackages(), a.fetchServiceStatus())
 
 	// Site-specific navigation messages
 	case screens.ShowCreateFormMsg:
@@ -328,6 +413,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.backupScreen.Update(msg)
 		a.backupScreen = updated.(*screens.BackupScreen)
 		return cmd
+	case ScreenSetup:
+		updated, cmd := a.setupScreen.Update(msg)
+		a.setupScreen = updated.(*screens.SetupScreen)
+		return cmd
 	default:
 		return nil
 	}
@@ -358,6 +447,8 @@ func (a *App) View() string {
 		content = a.queuesScreen.View()
 	case ScreenBackup:
 		content = a.backupScreen.View()
+	case ScreenSetup:
+		content = a.setupScreen.View()
 	default:
 		content = a.theme.Subtitle.Render(
 			fmt.Sprintf("\n  [%s] screen - Coming soon...\n\n  Press 'esc' to go back",
@@ -377,6 +468,8 @@ func (a *App) screenTitle() string {
 		return "Create Site"
 	case ScreenSiteDetail:
 		return a.siteDetail.ScreenTitle()
+	case ScreenSetup:
+		return "Setup"
 	default:
 		for name, screen := range screenNames {
 			if screen == a.current {
@@ -397,7 +490,7 @@ func (a *App) currentBindings() []components.KeyBinding {
 		return append([]components.KeyBinding{
 			{Key: "j/k", Desc: "navigate"},
 			{Key: "enter", Desc: "select"},
-			{Key: "1-8", Desc: "jump to"},
+			{Key: "1-9", Desc: "jump to"},
 			{Key: "q", Desc: "quit"},
 		}, base...)
 	case ScreenSiteCreate:
@@ -454,6 +547,13 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "c", Desc: "create"},
 			{Key: "r", Desc: "restore"},
 			{Key: "d", Desc: "delete"},
+			{Key: "esc", Desc: "back"},
+		}, base...)
+	case ScreenSetup:
+		return append([]components.KeyBinding{
+			{Key: "j/k", Desc: "navigate"},
+			{Key: "space", Desc: "toggle"},
+			{Key: "enter", Desc: "confirm"},
 			{Key: "esc", Desc: "back"},
 		}, base...)
 	default:
