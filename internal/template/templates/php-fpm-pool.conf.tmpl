@@ -4,7 +4,7 @@ user = {{ .User }}
 group = {{ .User }}
 
 listen = {{ .SocketPath }}
-listen.owner = {{ .User }}
+listen.owner = www-data
 listen.group = www-data
 listen.mode = 0660
 
@@ -14,13 +14,18 @@ pm.max_children = {{ .MaxChildren }}
 pm.start_servers = {{ .StartServers }}
 pm.min_spare_servers = {{ .MinSpare }}
 pm.max_spare_servers = {{ .MaxSpare }}
-pm.max_requests = 500
+pm.max_requests = {{ .MaxRequests }}
 
-; Logging
+; PHP settings (admin_value prevents .user.ini override)
+php_admin_value[memory_limit] = {{ .MemoryLimit }}
+php_admin_value[upload_max_filesize] = {{ .UploadMaxSize }}
+php_admin_value[post_max_size] = {{ .UploadMaxSize }}
+php_admin_value[date.timezone] = {{ .Timezone }}
 php_admin_value[error_log] = /home/{{ .User }}/logs/php-error.log
 php_admin_flag[log_errors] = on
 
-; Security: restrict to site directory
+; Security: restrict to site directory and limit PHP execution
 php_admin_value[open_basedir] = /home/{{ .User }}:/tmp:/usr/share/php
 php_admin_value[sys_temp_dir] = /home/{{ .User }}/tmp
 php_admin_value[upload_tmp_dir] = /home/{{ .User }}/tmp
+security.limit_extensions = .php

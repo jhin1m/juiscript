@@ -27,8 +27,12 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
 
 ### PHP Management
 - Support multiple PHP versions (ondrej/php PPA)
-- Auto-configure PHP-FPM pools per site
+- Install/remove PHP versions with common & optional extensions
+- Auto-configure PHP-FPM pools per site with dynamic process manager
 - Pool per site for isolation and resource control
+- Zero-downtime PHP version switching with atomic rollback
+- Per-site user/group isolation in FPM pools
+- Security constraints: open_basedir, extension restrictions
 
 ### Database (MariaDB)
 - Create/delete databases and users
@@ -94,9 +98,11 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
 - [x] System command execution with logging
 - [x] Atomic file operations
 - [x] Linux user management interface
-- [ ] Site creation and deletion
-- [ ] Nginx vhost generation
-- [ ] PHP-FPM pool configuration
+- [x] Nginx vhost CRUD & enable/disable
+- [x] PHP version install/remove/list with FPM status
+- [x] PHP-FPM pool creation, deletion, version switching
+- [x] TUI PHP management screen
+- [ ] Site creation and deletion (integrates Nginx + PHP)
 - [ ] MariaDB user/database management
 - [ ] SSL certificate automation
 - [ ] Backup scheduling and execution
@@ -127,8 +133,37 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
 ## Version & Changes
 
 - **v0.1.0-dev** (2026-03-02): Initial project structure, MVP scaffolding
-- Framework: Go CLI with Bubble Tea TUI, config system, template engine
-- Status: Core infrastructure complete, feature implementation in progress
+  - Framework: Go CLI with Bubble Tea TUI, config system, template engine
+  - Status: Core infrastructure complete, feature implementation in progress
+
+- **Phase 01** (Complete): Infrastructure & Config
+  - Config system (TOML loading/saving with defaults)
+  - System abstractions (Executor, FileManager, UserManager)
+  - Template engine with embedded files
+  - Basic Bubble Tea TUI with dashboard
+
+- **Phase 02** (Complete): Nginx Vhost Management
+  - Nginx vhost CRUD operations
+  - Templates for Laravel, WordPress, SSL
+  - Enable/disable via symlinks
+  - Config validation with `nginx -t`
+  - Atomic operations with rollback
+
+- **Phase 03** (Complete): Site Lifecycle
+  - Site creation/deletion with user accounts
+  - Integration with Nginx manager
+  - TUI navigation & screens
+
+- **Phase 04** (Complete): PHP Management
+  - PHP version install/remove/list
+  - ondrej/php PPA auto-setup
+  - FPM service status tracking
+  - Per-site FPM pool creation/deletion
+  - Zero-downtime version switching
+  - Dynamic process manager (pm=dynamic)
+  - Per-site user/group isolation
+  - Security restrictions (open_basedir, extensions)
+  - TUI PHP management screen
 
 ## Dependencies
 

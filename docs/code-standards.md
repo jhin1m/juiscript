@@ -13,9 +13,9 @@ internal/
     components/         Reusable TUI components (Header, StatusBar)
     screens/            Full-screen views (Dashboard, Sites, etc)
     theme/              Color scheme and styling
-  site/                 Site lifecycle (future)
-  nginx/                Vhost management (future)
-  php/                  PHP-FPM management (future)
+  site/                 Site lifecycle
+  nginx/                Vhost management
+  php/                  PHP-FPM management & pool CRUD
   database/             MariaDB operations (future)
   ssl/                  Let's Encrypt automation (future)
   backup/               Backup & restore (future)
@@ -105,6 +105,28 @@ if err := fm.RemoveSymlink(path); err != nil {
 }
 ```
 
+## Domain-Specific Patterns
+
+### PHP Version & Pool Management
+All pool operations follow safe defaults and atomic patterns:
+
+```go
+// PoolConfig with defaults applied by CreatePool
+cfg := php.DefaultPool("example.com", "exampleuser", "8.3")
+cfg.MaxChildren = 10  // optional override
+err := mgr.CreatePool(ctx, cfg)
+// → /etc/php/8.3/fpm/pool.d/example.com.conf created & FPM reloaded
+
+// Version switching: zero-downtime atomic sequence
+err := mgr.SwitchVersion(ctx, newPoolCfg, "8.2", nginxReloadFn)
+// → Creates new pool, reloads Nginx, removes old pool (rollback on failure)
+```
+
+Validation patterns:
+- `validateVersion("8.3")`: Checks X.Y format
+- `validateDomain(domain)`: Prevents path traversal via "/" or ".."
+- `isVersionDir(name)`: Validates directory name is version-like
+
 ## Testing
 
 ### Guidelines
@@ -112,6 +134,16 @@ if err := fm.RemoveSymlink(path); err != nil {
 - 70%+ coverage for critical packages
 - Table-driven tests for multiple scenarios
 - Use testing.T exclusively, no fmt.Println
+
+### Pattern: Mock Executor for PHP Manager
+```go
+exec := newMockExecutor()
+exec.outputs["systemctl is-active php8.3-fpm"] = "active"
+exec.failOn["apt-get"] = fmt.Errorf("network error")
+
+mgr := php.NewManager(exec, fm, tpl)
+// → All system calls intercepted; no root required
+```
 
 ### Pattern: Table-Driven Tests
 ```go

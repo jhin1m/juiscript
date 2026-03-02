@@ -51,6 +51,7 @@ type App struct {
 	siteCreate  *screens.SiteCreate
 	siteDetail  *screens.SiteDetail
 	nginxScreen *screens.NginxScreen
+	phpScreen  *screens.PHPScreen
 	width       int
 	height      int
 }
@@ -69,6 +70,7 @@ func NewApp() *App {
 		siteCreate:  screens.NewSiteCreate(t),
 		siteDetail:  screens.NewSiteDetail(t),
 		nginxScreen: screens.NewNginxScreen(t),
+		phpScreen:  screens.NewPHPScreen(t),
 	}
 }
 
@@ -145,6 +147,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.TestNginxMsg:
 		// TODO: Call nginx manager to test config
 		return a, nil
+
+	// PHP screen messages
+	case screens.InstallPHPMsg:
+		// TODO: Call PHP manager to install version
+		return a, nil
+
+	case screens.RemovePHPMsg:
+		// TODO: Call PHP manager to remove version
+		return a, nil
 	}
 
 	// Delegate to active screen
@@ -183,6 +194,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.nginxScreen.Update(msg)
 		a.nginxScreen = updated.(*screens.NginxScreen)
 		return cmd
+	case ScreenPHP:
+		updated, cmd := a.phpScreen.Update(msg)
+		a.phpScreen = updated.(*screens.PHPScreen)
+		return cmd
 	default:
 		return nil
 	}
@@ -203,6 +218,8 @@ func (a *App) View() string {
 		content = a.siteDetail.View()
 	case ScreenNginx:
 		content = a.nginxScreen.View()
+	case ScreenPHP:
+		content = a.phpScreen.View()
 	default:
 		content = a.theme.Subtitle.Render(
 			fmt.Sprintf("\n  [%s] screen - Coming soon...\n\n  Press 'esc' to go back",
@@ -256,6 +273,13 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "e", Desc: "enable/disable"},
 			{Key: "d", Desc: "delete"},
 			{Key: "t", Desc: "test config"},
+			{Key: "esc", Desc: "back"},
+		}, base...)
+	case ScreenPHP:
+		return append([]components.KeyBinding{
+			{Key: "j/k", Desc: "navigate"},
+			{Key: "i", Desc: "install"},
+			{Key: "r", Desc: "remove"},
 			{Key: "esc", Desc: "back"},
 		}, base...)
 	default:

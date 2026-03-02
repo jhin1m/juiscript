@@ -134,9 +134,27 @@ Three core interfaces for testability (no root in tests):
    - Linux user account management
    - Metadata storage
 
+3. **php/** (Phase 04 - Complete)
+   ```go
+   Manager {
+     EnsurePPA() error                                    // Add ondrej/php PPA
+     InstallVersion(ctx, version string) error           // Install PHP + extensions
+     RemoveVersion(ctx, version string, sites []string) error  // Remove if no sites use it
+     ListVersions(ctx) ([]VersionInfo, error)            // All versions with FPM status
+     ReloadFPM(ctx, version string) error                // Reload FPM service
+     CreatePool(ctx, cfg PoolConfig) error               // Create per-site FPM pool
+     DeletePool(ctx, domain, version string) error       // Remove pool config
+     SwitchVersion(ctx, cfg PoolConfig, fromVersion string, reloadFn) error
+   }
+   ```
+   - Multi-version PHP support (ondrej/php PPA)
+   - Dynamic FPM process manager per site
+   - Zero-downtime version switching with rollback
+   - Per-site user/group isolation
+   - Security constraints (open_basedir, extension restrictions)
+
 **Planned Packages**:
 
-- **php/**: Multi-version support, pool management per site
 - **database/**: MariaDB user/database operations
 - **ssl/**: Let's Encrypt integration via certbot
 - **backup/**: Full/partial backups, retention, restore
@@ -144,6 +162,42 @@ Three core interfaces for testability (no root in tests):
 - **supervisor/**: Queue worker management
 
 ## Data Flow
+
+### PHP-FPM Pool Creation Sequence (Phase 04)
+```
+TUI PHP Screen OR Site Manager [CreatePool(PoolConfig)]
+    ↓
+Validate: PHPVersion format, Domain path traversal check
+    ↓
+Apply defaults for zero values (MaxChildren=5, etc)
+    ↓
+Map PoolConfig → poolTemplateData
+    ↓
+Template.Render [php-fpm-pool.conf.tmpl with data]
+    ↓
+FileManager.WriteAtomic [Write to /etc/php/{ver}/fpm/pool.d/{domain}.conf]
+    ↓
+Manager.ReloadFPM [systemctl reload php{ver}-fpm]
+    ↓
+Success: Pool serving with new socket path
+```
+
+### PHP Version Switch Sequence (Phase 04 - Zero Downtime)
+```
+TUI PHP Screen [SwitchVersion(cfg, fromVersion, reloadNginx)]
+    ↓
+Validate: fromVersion ≠ toVersion
+    ↓
+Step 1: CreatePool [Create new pool with target PHP version]
+    ↓
+Step 2: ReloadNginx [Caller updates Nginx vhost to new socket]
+    ↓
+On Failure → Rollback: DeletePool(cfg.SiteDomain, cfg.PHPVersion)
+    ↓
+Step 3: DeletePool [Remove old pool config]
+    ↓
+Success: Site now on new PHP version, zero downtime
+```
 
 ### Vhost Creation Sequence (Phase 03)
 ```
@@ -303,6 +357,11 @@ Templates (Embedded):
 ├── nginx-wordpress.conf.tmpl    ← WordPress-specific Nginx config
 ├── nginx-ssl.conf.tmpl          ← SSL certificate configuration
 ├── php-fpm-pool.conf.tmpl       ← PHP-FPM pool per site
+│   - User/group isolation per site
+│   - Dynamic process manager (pm=dynamic)
+│   - Socket at /run/php/php{version}-fpm-{user}.sock
+│   - Security: open_basedir, upload restrictions, extension limits
+│   - Logging: php-error.log per site
 └── supervisor-worker.conf.tmpl  ← Queue worker process management
 ```
 

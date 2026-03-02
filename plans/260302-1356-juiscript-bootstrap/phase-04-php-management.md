@@ -6,7 +6,7 @@ Multi-version PHP-FPM management via ondrej/php PPA. Each site has its own FPM p
 ## Overview
 - **Effort**: 5h
 - **Priority**: P1
-- **Status**: pending
+- **Status**: DONE (2026-03-02)
 - **Depends on**: Phase 01, Phase 02
 
 ## Key Insights
@@ -114,15 +114,24 @@ templates/php-fpm-pool.conf.tmpl
 10. **PPA management**: `add-apt-repository ppa:ondrej/php -y` on first install
 
 ## Todo
-- [ ] PHP-FPM pool template
-- [ ] Manager.InstallVersion with PPA check
-- [ ] Manager.RemoveVersion with safety check
-- [ ] Manager.ListVersions
-- [ ] Manager.CreatePool
-- [ ] Manager.DeletePool
-- [ ] Manager.SwitchVersion (orchestration)
-- [ ] TUI PHP screen
-- [ ] Unit tests
+- [x] PHP-FPM pool template
+- [x] Manager.InstallVersion with PPA check
+- [x] Manager.RemoveVersion with safety check
+- [x] Manager.ListVersions
+- [x] Manager.CreatePool
+- [x] Manager.DeletePool
+- [x] Manager.SwitchVersion (orchestration)
+- [x] TUI PHP screen
+- [x] Unit tests (17/17 passing)
+
+## Review Findings (code-reviewer-260302-1454)
+- [x] **MUST FIX**: Add `validateDomain` in `CreatePool`/`DeletePool` (path traversal via domain string)
+- [x] **MUST FIX**: Fix `isVersionDir(".")` returns `true` (empty-part edge case)
+- [x] **SHOULD FIX**: `SwitchVersion` step-3 error semantics ambiguous (`"warning: ..."` string)
+- [x] **SHOULD FIX**: Inject `phpBaseDir` into `NewManager` to make `ListVersions` testable
+- [x] **MINOR**: Document apt glob behavior for `php8.3-*` removal
+- [x] **MINOR**: Consolidate duplicate defaults between `DefaultPool` and `CreatePool`
+- [x] **FUTURE**: Wire `php.Manager` into `App` for `InstallPHPMsg`/`RemovePHPMsg`
 
 ## Success Criteria
 - Can install PHP 8.3 and see it listed with status

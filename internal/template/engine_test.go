@@ -111,21 +111,29 @@ func TestRenderPHPFPMPool(t *testing.T) {
 	}
 
 	data := struct {
-		PoolName   string
-		User       string
-		SocketPath string
-		MaxChildren int
-		StartServers int
-		MinSpare     int
-		MaxSpare     int
+		PoolName      string
+		User          string
+		SocketPath    string
+		MaxChildren   int
+		StartServers  int
+		MinSpare      int
+		MaxSpare      int
+		MaxRequests   int
+		MemoryLimit   string
+		UploadMaxSize string
+		Timezone      string
 	}{
-		PoolName:     "site_example_com",
-		User:         "site_example_com",
-		SocketPath:   "/run/php/php8.3-fpm-site_example_com.sock",
-		MaxChildren:  5,
-		StartServers: 2,
-		MinSpare:     1,
-		MaxSpare:     3,
+		PoolName:      "site_example_com",
+		User:          "site_example_com",
+		SocketPath:    "/run/php/php8.3-fpm-site_example_com.sock",
+		MaxChildren:   5,
+		StartServers:  2,
+		MinSpare:      1,
+		MaxSpare:      3,
+		MaxRequests:   500,
+		MemoryLimit:   "256M",
+		UploadMaxSize: "64M",
+		Timezone:      "UTC",
 	}
 
 	result, err := engine.Render("php-fpm-pool.conf.tmpl", data)
@@ -141,5 +149,11 @@ func TestRenderPHPFPMPool(t *testing.T) {
 	}
 	if !strings.Contains(result, "open_basedir") {
 		t.Error("expected open_basedir security restriction")
+	}
+	if !strings.Contains(result, "memory_limit] = 256M") {
+		t.Error("expected memory_limit setting")
+	}
+	if !strings.Contains(result, "security.limit_extensions = .php") {
+		t.Error("expected security.limit_extensions")
 	}
 }
