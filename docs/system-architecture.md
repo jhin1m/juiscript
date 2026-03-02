@@ -110,7 +110,9 @@ Three core interfaces for testability (no root in tests):
 
 **Implemented Packages**:
 
-0. **provisioner/** (Phase 01 - Complete)
+0. **provisioner/** (Phase 01 - Complete: Detector; Phase 02 - Complete: Installer)
+
+   **Detector**:
    ```go
    Detector {
      DetectAll(ctx) → ([]PackageInfo, error)  // Detect all LEMP packages
@@ -121,6 +123,23 @@ Three core interfaces for testability (no root in tests):
    - Dynamic PHP version detection from /etc/php/ filesystem scan
    - Returns comprehensive package information with installed status and versions
    - Used for system health checks and provisioning decisions
+
+   **Installer** (Phase 02):
+   ```go
+   Installer {
+     AptUpdate(ctx) error
+     InstallNginx(ctx) → (*InstallResult, error)
+     InstallRedis(ctx) → (*InstallResult, error)
+     InstallMariaDB(ctx) → (*InstallResult, error)    // + hardening
+     InstallPHP(ctx, version) → (*InstallResult, error)
+   }
+   ```
+   - Idempotent package installation via apt-get
+   - Service management: systemctl enable + start
+   - MariaDB hardening: Removes test DB, anonymous users, remote root access
+   - Shared isPackageInstalled function with Detector (DRY)
+   - 5-minute timeout per package install
+   - Returns InstallResult with status (installed/skipped/failed)
 
 1. **nginx/** (Phase 03 - Complete)
    ```go
@@ -579,6 +598,116 @@ Step 2: Restore database (if archive contains)
 - Archive permissions: 0600 (readable only by backup user)
 - Directory permissions: 0750
 - Timeout: 15 minutes for large sites
+
+## Package Installation Implementation (Phase 02)
+
+### Installation Strategy
+```
+Installer struct (Executor + optional php.Manager)
+    ↓
+For each package (Nginx, Redis, MariaDB, PHP):
+    ↓
+Check if already installed via dpkg-query
+    ↓
+If installed → Return StatusSkipped
+    ↓
+If not → apt-get install with noninteractive flags
+    ↓
+systemctl enable + start service
+    ↓
+Special: MariaDB → Run SQL hardening after startup
+    ↓
+Return InstallResult (status + message)
+```
+
+### Idempotency Pattern
+All installation methods are idempotent:
+- Check package status first (dpkg-query)
+- Skip if already installed (no-op)
+- Install only if needed
+- Can safely re-run multiple times
+- Useful for infrastructure automation
+
+### apt-get Configuration
+- **Environment**: DEBIAN_FRONTEND=noninteractive (no prompts)
+- **Flags**:
+  - `--force-confdef`: Use default for changed config files
+  - `--force-confold`: Keep existing config files (don't ask)
+  - `DPkg::Lock::Timeout=120`: Wait up to 120s for apt lock
+- **Timeout**: 5 minutes per package install
+- **Error handling**: Wraps errors with context
+
+### MariaDB Hardening
+Executed after successful installation via `mysql --user=root`:
+```sql
+DELETE FROM mysql.user WHERE User='';
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';
+FLUSH PRIVILEGES;
+```
+
+**Security improvements**:
+- Removes anonymous login accounts
+- Removes remote root access (keeps local socket auth only)
+- Deletes test database
+- Applies changes immediately
+
+### Shared isPackageInstalled Function
+Located in installer.go, used by both Detector and Installer:
+```go
+isPackageInstalled(ctx, executor, pkg) → (bool, version)
+  ↓
+dpkg-query -W --showformat='${Status}\n${Version}' {pkg}
+  ↓
+Parse Status line: must contain "install ok installed"
+  ↓
+Extract Version from second line if installed
+  ↓
+Return (installed, version)
+```
+
+Benefits:
+- Single source of truth for package status
+- Both Detector (detection) and Installer (installation check) reuse same logic
+- Consistent behavior across codebase
+
+### PHP Installation Delegation
+When Installer.InstallPHP called:
+```
+InstallPHP(ctx, version)
+    ↓
+Check if phpMgr is nil → Return error if unavailable
+    ↓
+Delegate to php.Manager.InstallVersion(ctx, version)
+    ↓
+PHP Manager handles: PPA setup, version-specific packages, extensions
+    ↓
+Return InstallResult with status from PHP Manager
+```
+
+Rationale: PHP has complex multi-version setup (PPA, extensions, FPM pools)
+→ Leverage existing php.Manager rather than duplicate logic
+
+### Service Management
+After each apt install (except PHP):
+```
+systemctl enable {service}   ← Start on boot
+systemctl start {service}    ← Start immediately
+```
+
+Service mappings:
+- nginx → "nginx"
+- redis-server → "redis-server"
+- mariadb-server → "mariadb"
+
+### Test Coverage (12 tests)
+1. **AptUpdate** (2 tests): Success, network failure
+2. **InstallNginx** (3 tests): Success, already-installed, apt-failure
+3. **InstallRedis** (1 test): Success case
+4. **InstallMariaDB** (3 tests): Success (with hardening), already-installed, hardening-failure
+5. **InstallPHP** (1 test): nil manager error handling
+6. **Mock patterns**: Command verification, error injection, SQL input validation
 
 ## Package Detection Implementation (Phase 01)
 

@@ -46,7 +46,9 @@ juiscript/
 │   │   └── manager_test.go     # 34 unit tests
 │   ├── provisioner/
 │   │   ├── detector.go         # Package detection (Phase 01)
-│   │   └── detector_test.go    # 8 unit tests
+│   │   ├── detector_test.go    # 8 unit tests
+│   │   ├── installer.go        # Package installation (Phase 02, 196 lines)
+│   │   └── installer_test.go   # 12 unit tests
 │   └── tui/
 │       ├── app.go              # Root model & screen router
 │       ├── components/
@@ -507,7 +509,12 @@ UserManager {
   - 15 comprehensive unit tests for ServiceStatusBar
   - Detector: Package detection for Nginx, MariaDB, Redis, PHP versions (148 lines)
   - 8 unit tests for package detection (isInstalled, DetectAll, isVersionDir)
-**Phase 02 - Site Management**: Site lifecycle manager, site creation/deletion ✓
+**Phase 02 - Package Installation**: Installer with apt-get, service management, MariaDB hardening ✓
+  - Installer: Idempotent package installation (InstallNginx, InstallRedis, InstallMariaDB, InstallPHP, AptUpdate)
+  - 12 unit tests covering success, already-installed, apt-failure, hardening-failure scenarios
+  - Shared isPackageInstalled function with Detector (DRY)
+  - MariaDB hardening: Remove test DB, anonymous users, remote root access
+**Phase 03 - Site Management**: Site lifecycle manager, site creation/deletion (future TUI integration)
 **Phase 03 - Nginx/Vhost**: Manager CRUD, templates, TUI screen, enable/disable ✓
 **Phase 04 - PHP Management**: Version install/remove/list, FPM pool CRUD, version switch, TUI screen ✓
 **Phase 05 - Database Management**: Manager CRUD, user ops, import/export, TUI screen, 20 unit tests ✓
@@ -852,6 +859,82 @@ PackageInfo {
 - Supports configurable outputs per command
 - Supports configurable error injection per command
 - dpkgCmd() helper builds expected command strings for matching
+
+### internal/provisioner/installer.go (196 lines) - Phase 02: Package Installation
+**Purpose**: Idempotent apt-get installation with service management and MariaDB hardening
+- InstallStatus enum: installed, skipped (already present), failed
+- InstallResult struct: Package, Status, Message for operation outcomes
+- installTimeout: 5 minutes per package
+
+**Installer Struct**:
+- executor: system.Executor for command execution
+- phpMgr: Optional *php.Manager for PHP version delegation
+
+**Key Methods**:
+- **AptUpdate(ctx)**: Runs apt-get update with DEBIAN_FRONTEND=noninteractive
+- **InstallNginx(ctx)**: Installs nginx, enables/starts service
+- **InstallRedis(ctx)**: Installs redis-server, enables/starts service
+- **InstallMariaDB(ctx)**: Installs mariadb-server, enables/starts, hardens database
+  - Removes test database, anonymous users, remote root access via SQL
+  - Keeps unix_socket auth for local root (matches existing DB pattern)
+- **InstallPHP(ctx, version)**: Delegates to php.Manager.InstallVersion(ctx, version)
+- **installSimplePackage(ctx, pkg, serviceName)**: Common pattern - idempotent install
+  - Checks package status via dpkg-query
+  - Skips if already installed (StatusSkipped)
+  - Installs via apt-get with force-conf flags
+  - Enables and starts service via systemctl
+- **aptInstall(ctx, pkg)**: Noninteractive apt-get with lock timeout
+  - Flags: DEBIAN_FRONTEND=noninteractive, --force-confdef, --force-confold
+  - DPkg::Lock::Timeout=120 (handles concurrent apt operations)
+- **enableAndStart(ctx, service)**: systemctl enable + start (idempotent)
+- **hardenMariaDB(ctx)**: SQL hardening via mysql CLI
+  - DELETE anonymous users and remote root access
+  - DROP test database
+  - FLUSH PRIVILEGES to apply changes
+
+**Idempotency**: All methods skip if package already installed (dpkg-query validation)
+
+**Shared Function**:
+- **isPackageInstalled(ctx, executor, pkg)**: Checks package status via dpkg-query
+  - Returns (installed bool, version string)
+  - Parses dpkg output for status + version
+  - Shared with detector.go (DRY pattern)
+
+### internal/provisioner/installer_test.go (198 lines) - Phase 02
+**Purpose**: 12 comprehensive unit tests for Installer package operations
+**Test Coverage**:
+
+1. **AptUpdate tests** (2 tests):
+   - Success: Executes apt-get update with DEBIAN_FRONTEND=noninteractive
+   - Failure: Propagates network errors from apt-get
+
+2. **InstallNginx tests** (3 tests):
+   - Success: Installs, enables, and starts nginx service
+   - AlreadyInstalled: Skips installation (StatusSkipped)
+   - AptFailure: Returns StatusFailed with error wrapping
+
+3. **InstallRedis tests** (1 test):
+   - Success: Installs redis-server and starts service
+
+4. **InstallMariaDB tests** (3 tests):
+   - Success: Installs, enables, starts, and hardens MariaDB
+     - Verifies DELETE/DROP/FLUSH SQL commands executed
+     - Checks removal of anonymous users and test database
+   - AlreadyInstalled: Skips installation (StatusSkipped)
+   - HardeningFailure: Returns StatusFailed with "hardening failed" message
+
+5. **InstallPHP tests** (1 test):
+   - NilManager: Returns StatusFailed when php.Manager not available
+
+6. **aptInstallCmd() helper**:
+   - Builds expected apt-get command string with all flags for mock matching
+   - Used across multiple tests for command verification
+
+**Mock Executor Pattern**:
+- Captures all executed commands for assertion
+- Supports per-command output configuration
+- Supports per-command failure injection
+- lastInput field captures stdin for SQL command verification
 
 ### internal/tui/screens/backup.go (varies)
 **Purpose**: Backup management screen

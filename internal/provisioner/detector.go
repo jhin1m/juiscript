@@ -45,7 +45,7 @@ func (d *Detector) DetectAll(ctx context.Context) ([]PackageInfo, error) {
 
 	// Check static packages (nginx, mariadb, redis)
 	for _, sp := range staticPackages {
-		installed, version := d.isInstalled(ctx, sp.pkg)
+		installed, version := isPackageInstalled(ctx, d.executor, sp.pkg)
 		results = append(results, PackageInfo{
 			Name:        sp.name,
 			DisplayName: sp.displayName,
@@ -60,7 +60,7 @@ func (d *Detector) DetectAll(ctx context.Context) ([]PackageInfo, error) {
 	if len(phpVersions) > 0 {
 		for _, ver := range phpVersions {
 			pkg := "php" + ver + "-fpm"
-			installed, version := d.isInstalled(ctx, pkg)
+			installed, version := isPackageInstalled(ctx, d.executor, pkg)
 			results = append(results, PackageInfo{
 				Name:        "php",
 				DisplayName: "PHP " + ver,
@@ -80,31 +80,6 @@ func (d *Detector) DetectAll(ctx context.Context) ([]PackageInfo, error) {
 	}
 
 	return results, nil
-}
-
-// isInstalled checks if a package is installed via dpkg-query.
-// Returns (installed, version). On error or missing package, returns (false, "").
-func (d *Detector) isInstalled(ctx context.Context, pkg string) (bool, string) {
-	output, err := d.executor.Run(ctx,
-		"dpkg-query", "-W", "--showformat=${Status}\n${Version}", pkg,
-	)
-	if err != nil {
-		return false, ""
-	}
-
-	lines := strings.SplitN(strings.TrimSpace(output), "\n", 2)
-	if len(lines) < 1 {
-		return false, ""
-	}
-
-	// Status line must contain "install ok installed"
-	installed := strings.Contains(lines[0], "install ok installed")
-	version := ""
-	if installed && len(lines) == 2 {
-		version = strings.TrimSpace(lines[1])
-	}
-
-	return installed, version
 }
 
 // detectPHPVersions scans /etc/php/ for directories matching version format (X.Y).

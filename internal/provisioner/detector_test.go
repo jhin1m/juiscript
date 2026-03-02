@@ -9,9 +9,10 @@ import (
 
 // mockExecutor simulates dpkg-query commands for testing.
 type mockExecutor struct {
-	commands []string
-	failOn   map[string]error
-	outputs  map[string]string
+	commands  []string
+	failOn    map[string]error
+	outputs   map[string]string
+	lastInput string // captures last RunWithInput input
 }
 
 func newMockExecutor() *mockExecutor {
@@ -37,8 +38,18 @@ func (m *mockExecutor) Run(_ context.Context, name string, args ...string) (stri
 	return "", nil
 }
 
-func (m *mockExecutor) RunWithInput(_ context.Context, _ string, name string, args ...string) (string, error) {
+func (m *mockExecutor) RunWithInput(_ context.Context, input string, name string, args ...string) (string, error) {
+	m.lastInput = input
 	return m.Run(context.Background(), name, args...)
+}
+
+func (m *mockExecutor) hasCommand(substr string) bool {
+	for _, cmd := range m.commands {
+		if strings.Contains(cmd, substr) {
+			return true
+		}
+	}
+	return false
 }
 
 // dpkgCmd builds the expected dpkg-query command string for matching mock outputs.
@@ -52,8 +63,7 @@ func TestIsInstalled_InstalledPackage(t *testing.T) {
 	exec := newMockExecutor()
 	exec.outputs[dpkgCmd("nginx")] = "install ok installed\n1.24.0-2ubuntu1"
 
-	d := NewDetector(exec)
-	installed, version := d.isInstalled(context.Background(), "nginx")
+	installed, version := isPackageInstalled(context.Background(), exec, "nginx")
 
 	if !installed {
 		t.Error("expected nginx to be installed")
@@ -67,8 +77,7 @@ func TestIsInstalled_NotInstalled(t *testing.T) {
 	exec := newMockExecutor()
 	exec.failOn[dpkgCmd("nginx")] = fmt.Errorf("exit code 1: no packages found")
 
-	d := NewDetector(exec)
-	installed, version := d.isInstalled(context.Background(), "nginx")
+	installed, version := isPackageInstalled(context.Background(), exec, "nginx")
 
 	if installed {
 		t.Error("expected nginx to NOT be installed")
@@ -83,8 +92,7 @@ func TestIsInstalled_BadStatus(t *testing.T) {
 	// Package exists in dpkg DB but is deinstalled/removed
 	exec.outputs[dpkgCmd("redis-server")] = "deinstall ok config-files\n7.0.15"
 
-	d := NewDetector(exec)
-	installed, version := d.isInstalled(context.Background(), "redis-server")
+	installed, version := isPackageInstalled(context.Background(), exec, "redis-server")
 
 	if installed {
 		t.Error("expected redis-server to NOT be installed (deinstalled state)")
