@@ -36,7 +36,7 @@ func (p *ServicePanel) View() string {
 
 	var lines []string
 	for _, svc := range p.services {
-		dot, style := p.statusIndicator(svc.State)
+		dot, style := statusIndicator(p.theme, svc.State)
 		name := string(svc.Name)
 		line := fmt.Sprintf("  %s %s", style.Render(dot), p.theme.Subtitle.Render(name))
 		lines = append(lines, line)
@@ -46,14 +46,3 @@ func (p *ServicePanel) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, title, content)
 }
 
-// statusIndicator returns a colored dot for the service state.
-func (p *ServicePanel) statusIndicator(state string) (string, lipgloss.Style) {
-	switch state {
-	case "active":
-		return "●", p.theme.OkText
-	case "failed":
-		return "●", p.theme.ErrorText
-	default:
-		return "○", p.theme.Subtitle
-	}
-}

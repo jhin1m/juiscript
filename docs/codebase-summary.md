@@ -150,6 +150,33 @@ Config
 - Layout: "Key: Description" format
 - Right-aligned at bottom
 
+### internal/tui/components/service-status-bar.go (128 lines) - Phase 01
+**Purpose**: Horizontal health indicator bar for LEMP services
+- Renders one-line service overview (green dot=active, red dot=failed, hollow=inactive)
+- Shows memory usage for active services (e.g., "● nginx 45MB")
+- Displays between header and content on all TUI screens
+- Smart truncation for narrow terminals ("+N more" indicator)
+- Service name formatting: Shortens "php8.3-fpm" → "php8.3", "redis-server" → "redis"
+
+**Key Methods**:
+- NewServiceStatusBar(t *Theme): Constructor
+- SetServices([]service.Status): Update service list
+- SetWidth(w int): Set available terminal width for truncation
+- SetError(msg string): Display error instead of services (shows ⚠ icon)
+- View(): Renders single-line status bar
+
+**Truncation Logic**:
+- Full width: All services + memory (if fits)
+- Narrow: Shows progressively fewer services + "+N more" suffix
+- Extreme: Only "+N more" fallback when can't fit any service
+- Uses lipgloss.Width() for accurate rendering width (accounts for ANSI codes)
+
+### internal/tui/components/helpers.go (NEW) - Phase 01
+**Purpose**: Shared statusIndicator helper for service components
+- Returns colored dot symbol + style based on service state
+- Used by ServicePanel and ServiceStatusBar for consistent rendering
+- Mapping: "active"→●(green), "failed"→●(red), default→○(gray)
+
 ### internal/tui/theme/theme.go (varies)
 **Purpose**: Centralized styling
 - Lip Gloss styles for colors/formatting
@@ -471,7 +498,10 @@ UserManager {
 
 ## Phase Completion Status
 
-**Phase 01 - Infrastructure**: Config, system abstractions, template engine, basic TUI ✓
+**Phase 01 - Infrastructure**: Config, system abstractions, template engine, basic TUI, Service Status Bar component ✓
+  - ServiceStatusBar (horizontal LEMP health indicator, 128 lines)
+  - statusIndicator helper (shared with ServicePanel, 20 lines)
+  - 15 comprehensive unit tests
 **Phase 02 - Site Management**: Site lifecycle manager, site creation/deletion ✓
 **Phase 03 - Nginx/Vhost**: Manager CRUD, templates, TUI screen, enable/disable ✓
 **Phase 04 - PHP Management**: Version install/remove/list, FPM pool CRUD, version switch, TUI screen ✓
@@ -543,13 +573,39 @@ Status {
 - serviceCmd: Wraps tea.Msg into tea.Cmd for async execution
 - Messages: StartServiceMsg, StopServiceMsg, RestartServiceMsg, ReloadServiceMsg
 
-### Service Panel Component (internal/tui/components/servicepanel.go - 60 lines)
+### Service Panel Component (internal/tui/components/servicepanel.go - REFACTORED)
 **Purpose**: Compact service status overview for dashboard
 - Reusable component for dashboard integration
-- Shows service name + colored status indicator
+- Shows service name + colored status indicator via shared statusIndicator helper
 - Green dot (●) for active, red (●) for failed, hollow (○) for inactive
 - Minimal footprint for dashboard display
 - SetServices: Update service list
+- **Refactored**: Now uses shared statusIndicator(t, state) from helpers.go
+
+### internal/tui/components/service-status-bar_test.go (233 lines) - Phase 01
+**Purpose**: 15 comprehensive unit tests for ServiceStatusBar component
+**Test Coverage**:
+1. NewServiceStatusBar: Constructor initialization
+2. EmptyState: "No services detected" message when no services
+3. ErrorState: Shows ⚠ icon + error message
+4. ErrorClearedOnSetServices: Error clears when new services arrive
+5. ActiveService: Green ● dot + name + memory for running services
+6. InactiveService: Hollow ○ dot, no memory display
+7. FailedService: Red ● dot for failed state
+8. FormatServiceName: Name shortening (php8.3-fpm→php8.3, redis-server→redis)
+9. MultipleServices: Pipe (│) separator, multiple service rendering
+10. Truncation: "+N more" indicator when width constrained (40 chars)
+11. NoTruncationWideEnough: All services shown when width sufficient (200 chars)
+12. ActiveServiceWithZeroMemory: Omits 0MB for active services with no memory data
+13. TruncationExtreme: Fallback to "+N more" when can't fit even one service (5 char width)
+14. TruncationZeroWidth: Empty view when width ≤ padding (2 chars)
+15. SetWidth: Width property setter
+
+**Test Patterns**:
+- Table-driven for FormatServiceName (5 scenarios)
+- lipgloss.Width() for accurate ANSI code handling
+- Mock theme.New() for all tests
+- Multiple service combinations (4-service scenario)
 
 ### App Integration (internal/tui/app.go)
 **Changes**:
