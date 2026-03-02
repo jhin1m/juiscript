@@ -6,7 +6,7 @@ Backup and restore for sites including files and database. Supports full and par
 ## Overview
 - **Effort**: 4h
 - **Priority**: P3
-- **Status**: pending
+- **Status**: done
 - **Depends on**: Phase 01, Phase 02, Phase 05
 
 ## Key Insights
@@ -116,14 +116,14 @@ internal/tui/screens/backup.go
 10. **Metadata TOML**: Store enough info to restore on a different server
 
 ## Todo
-- [ ] Backup archive format with metadata
-- [ ] Manager.Create (full/files/database)
-- [ ] Manager.Restore with permission fix
-- [ ] Manager.List
-- [ ] Manager.Cleanup (retention)
-- [ ] Cron job setup/removal
-- [ ] TUI backup screen
-- [ ] Tests
+- [x] Backup archive format with metadata
+- [x] Manager.Create (full/files/database)
+- [x] Manager.Restore with permission fix
+- [x] Manager.List
+- [x] Manager.Cleanup (retention)
+- [x] Cron job setup/removal
+- [x] TUI backup screen
+- [x] Tests
 
 ## Success Criteria
 - Full backup creates a valid tar.gz with files + DB dump

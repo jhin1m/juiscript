@@ -190,11 +190,24 @@ Three core interfaces for testability (no root in tests):
    - Uptime tracking and state reporting
    - Atomic config writes with rollback on reload failure
 
-**Planned Packages**:
-
-- **database/**: MariaDB user/database operations
-- **ssl/**: Let's Encrypt integration via certbot
-- **backup/**: Full/partial backups, retention, restore
+9. **backup/** (Phase 09 - Complete)
+   ```go
+   Manager {
+     Create(ctx, opts Options) (*BackupInfo, error)     // Create full/partial backup archive
+     Restore(ctx, backupPath, domain string) error      // Restore from archive
+     List(domain string) ([]BackupInfo, error)          // All backups for domain
+     Delete(backupPath string) error                    // Remove backup file
+     Cleanup(domain string, keepLast int) error         // Retention policy
+     SetupCron(domain, schedule string) error           // Scheduled backups via cron
+     RemoveCron(domain string) error                    // Remove cron job
+   }
+   ```
+   - Full site backups (files + database)
+   - Partial backups (files-only or database-only)
+   - Portable archives with embedded metadata
+   - Retention policy with cleanup automation
+   - Cron-based scheduled backups
+   - Security: path traversal prevention, domain validation, restrictive permissions
 
 ## Data Flow
 
@@ -482,6 +495,78 @@ Processes started/managed by Supervisor
 - Color-coded states: RUNNING (green), FATAL (red), STOPPED (yellow)
 - Actions: start, stop, restart, delete
 - Reload timing: ~2s for supervisor to apply changes
+
+## Backup System Implementation (Phase 09)
+
+### Archive Structure
+```
+backup-archive.tar.gz
+├── metadata.toml          ← Domain, type, PHP version, DB creds
+├── files.tar.gz           ← Site files (if full or files-only)
+└── database.sql.gz        ← Database dump (if full or database-only)
+```
+
+### Backup Types
+- **BackupFull**: Files + database (complete site snapshot)
+- **BackupFiles**: Site files only (public_html, config, etc.)
+- **BackupDatabase**: Database dump only (data snapshot)
+
+### Backup Flow (Create)
+```
+Manager.Create(domain, type)
+    ↓
+Load site metadata → PHP version, DB name, site user
+    ↓
+Step 1: Database export (if full/database)
+  → mysqldump {domain} | gzip → database.sql.gz
+    ↓
+Step 2: Files archive (if full/files)
+  → tar czf files.tar.gz -C {site-root} .
+    ↓
+Step 3: Write metadata.toml
+  → Stores domain, type, PHP version, DB user for restore
+    ↓
+Step 4: Final archive
+  → tar czf {domain}_{timestamp}.tar.gz {temp-contents}
+    ↓
+Permissions 0600 (restrictive: contains DB dumps)
+```
+
+### Restore Flow
+```
+Manager.Restore(backup-path, domain)
+    ↓
+Path validation (must be in backup directory)
+    ↓
+Extract to temp dir
+    ↓
+Read metadata.toml
+    ↓
+Step 1: Restore files (if archive contains)
+  → tar xzf files.tar.gz -C {site-root}
+  → chown -R {site-user} {site-root}
+    ↓
+Step 2: Restore database (if archive contains)
+  → gunzip database.sql.gz | mysql {db-name}
+```
+
+### Cron Scheduling
+- Location: `/etc/cron.d/juiscript-{domain}`
+- Validation: 5-field format (`minute hour day month weekday`)
+- Prevents injection: Regex whitelist + command validation
+- Example: `0 2 * * *` = Daily at 2 AM full backup
+
+### Retention & Cleanup
+- Keep N most recent backups per domain
+- Older backups automatically deleted
+- Idempotent: Safe to run multiple times
+
+### Security Model
+- Path traversal: isInsideBackupDir validates all operations
+- Domain validation: safeNameRegex (alphanumeric + dot/dash/underscore)
+- Archive permissions: 0600 (readable only by backup user)
+- Directory permissions: 0750
+- Timeout: 15 minutes for large sites
 
 ## Logging & Monitoring
 

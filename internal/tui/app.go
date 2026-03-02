@@ -55,6 +55,7 @@ type App struct {
 	databaseScreen   *screens.DatabaseScreen
 	servicesScreen   *screens.ServicesScreen
 	queuesScreen     *screens.QueuesScreen
+	backupScreen     *screens.BackupScreen
 	width            int
 	height           int
 }
@@ -77,6 +78,7 @@ func NewApp() *App {
 		databaseScreen: screens.NewDatabaseScreen(t),
 		servicesScreen: screens.NewServicesScreen(t),
 		queuesScreen:   screens.NewQueuesScreen(t),
+		backupScreen:   screens.NewBackupScreen(t),
 	}
 }
 
@@ -213,6 +215,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.DeleteWorkerMsg:
 		// TODO: Call supervisor manager to delete worker
 		return a, nil
+
+	// Backup screen messages
+	case screens.CreateBackupMsg:
+		// TODO: Call backup manager to create backup
+		return a, nil
+
+	case screens.RestoreBackupMsg:
+		// TODO: Call backup manager to restore
+		return a, nil
+
+	case screens.DeleteBackupMsg:
+		// TODO: Call backup manager to delete
+		return a, nil
 	}
 
 	// Delegate to active screen
@@ -267,6 +282,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.queuesScreen.Update(msg)
 		a.queuesScreen = updated.(*screens.QueuesScreen)
 		return cmd
+	case ScreenBackup:
+		updated, cmd := a.backupScreen.Update(msg)
+		a.backupScreen = updated.(*screens.BackupScreen)
+		return cmd
 	default:
 		return nil
 	}
@@ -295,6 +314,8 @@ func (a *App) View() string {
 		content = a.servicesScreen.View()
 	case ScreenQueues:
 		content = a.queuesScreen.View()
+	case ScreenBackup:
+		content = a.backupScreen.View()
 	default:
 		content = a.theme.Subtitle.Render(
 			fmt.Sprintf("\n  [%s] screen - Coming soon...\n\n  Press 'esc' to go back",
@@ -381,6 +402,14 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "s", Desc: "start"},
 			{Key: "x", Desc: "stop"},
 			{Key: "r", Desc: "restart"},
+			{Key: "d", Desc: "delete"},
+			{Key: "esc", Desc: "back"},
+		}, base...)
+	case ScreenBackup:
+		return append([]components.KeyBinding{
+			{Key: "j/k", Desc: "navigate"},
+			{Key: "c", Desc: "create"},
+			{Key: "r", Desc: "restore"},
 			{Key: "d", Desc: "delete"},
 			{Key: "esc", Desc: "back"},
 		}, base...)

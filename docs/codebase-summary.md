@@ -41,6 +41,9 @@ juiscript/
 │   ├── supervisor/
 │   │   ├── manager.go          # Queue worker lifecycle (create/delete/start/stop/status)
 │   │   └── manager_test.go     # Unit tests
+│   ├── backup/
+│   │   ├── manager.go          # Backup lifecycle (create/restore/list/delete/cleanup/cron)
+│   │   └── manager_test.go     # 34 unit tests
 │   └── tui/
 │       ├── app.go              # Root model & screen router
 │       ├── components/
@@ -54,7 +57,8 @@ juiscript/
 │           ├── php.go          # PHP version management screen
 │           ├── database.go     # Database management screen
 │           ├── queues.go       # Queue worker management screen (Phase 08)
-│           └── services.go     # Service control screen
+│           ├── services.go     # Service control screen
+│           └── backup.go       # Backup/restore management screen (Phase 09)
 ├── templates/
 │   ├── nginx-laravel.conf.tmpl     # Laravel vhost template
 │   ├── nginx-wordpress.conf.tmpl   # WordPress vhost template
@@ -475,6 +479,7 @@ UserManager {
 **Phase 06 - SSL Management**: Certbot automation, Nginx SSL injection, TUI screen, full unit tests ✓
 **Phase 07 - Service Control**: Systemctl wrapper, start/stop/restart/reload/status/health, TUI screen, 16 unit tests ✓
 **Phase 08 - Supervisor/Queue Workers**: Worker lifecycle, template full params, TUI screen, supervisorctl integration ✓
+**Phase 09 - Backup System**: Full/partial backups, restore, list, delete, cleanup, cron scheduling, TUI screen, 34 unit tests ✓
 
 ## Service Control Implementation Details (Phase 07)
 
@@ -692,6 +697,54 @@ WorkerStatus {
 
 **Screen Title**: Queues
 
+### internal/backup/manager.go (494 lines)
+**Purpose**: Backup and restore lifecycle management with scheduling
+- Manager struct wraps Executor, FileManager, Config, Database manager
+- BackupType enum: Full (files + database), Files (site files only), Database (DB dump only)
+- BackupInfo: Path, Domain, Type, Size, CreatedAt metadata
+- Metadata struct embedded in archives: Domain, Type, ProjectType, PHPVersion, DBName, DBUser, SiteUser, CreatedAt
+
+**Key Operations**:
+- **Create()**: Packages site files (tar.gz) + DB dump (mysqldump.sql.gz) into archive
+  - Temp directory aggregation then final compression
+  - Metadata.toml written for cross-server portability
+  - Archive permissions 0600 (security: contains DB dumps)
+  - 15-minute timeout for large sites
+- **Restore()**: Extracts files + restores database from archive
+  - Path traversal validation (must be in backup directory)
+  - Atomic file extraction to temp dir
+  - Restores files with original ownership via chown
+  - Imports SQL dump into target database
+- **List()**: Returns all backups for domain sorted newest first
+  - Parses filename pattern: `{domain}_{YYYYMMdd_HHmmss}.tar.gz`
+  - Filters by domain, returns with size + creation time
+- **Delete()**: Removes single backup file (path must be in backup dir)
+- **Cleanup()**: Retention policy - keeps N most recent backups, deletes older
+- **SetupCron()**: Writes `/etc/cron.d/juiscript-{domain}` cron job
+  - Validation: 5-field cron schedule format, domain name safe characters
+  - Prevents command injection via newline/special char regex
+- **RemoveCron()**: Deletes cron job file (idempotent)
+
+**Security**:
+- Path traversal prevention: isInsideBackupDir validates all paths
+- Domain validation: safeNameRegex enforces alphanumeric + dot/dash/underscore only
+- Restrictive permissions: 0600 on archives, 0750 on directories
+- Regex validation for cron schedules (no shell injection)
+
+### internal/backup/manager_test.go (34 unit tests)
+**Coverage**: Backup creation, restore, list, cleanup, cron setup, path validation, filename parsing
+
+### internal/tui/screens/backup.go (varies)
+**Purpose**: Backup management screen
+- Display: Table with DOMAIN | SIZE | CREATED columns
+- List all backups for selected site
+- Keyboard: 'k'/'j' navigate, 'c' create, 'r' restore, 'd' delete, 'esc' back
+- Color-coded display with formatted sizes (KB/MB/GB)
+- Messages: CreateBackupMsg, RestoreBackupMsg, DeleteBackupMsg for app routing
+- Empty state with help text
+
+**Screen Title**: Backup
+
 ### internal/tui/theme/theme.go (UPDATED)
 **Addition**: WarnText style for warning states (amber color)
 - Used by QueuesScreen for STOPPED worker display
@@ -699,7 +752,6 @@ WorkerStatus {
 
 ## Future Additions
 
-- Backup scheduling & execution
 - Service control screens (stop/start/restart)
 - System monitoring and health checks
 - Wildcard certificate support
