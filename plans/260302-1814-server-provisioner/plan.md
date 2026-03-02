@@ -20,7 +20,7 @@ Auto-detect missing LEMP packages and install them via interactive TUI checklist
 | 01 | Package Detection | [phase-01-detection.md](phase-01-detection.md) | 1h | done |
 | 02 | Package Installation | [phase-02-installation.md](phase-02-installation.md) | 1.5h | done |
 | 03 | Provisioner Orchestrator | [phase-03-orchestrator.md](phase-03-orchestrator.md) | 0.5h | done |
-| 04 | TUI Setup Screen | [phase-04-tui-setup.md](phase-04-tui-setup.md) | 2h | pending |
+| 04 | TUI Setup Screen | [phase-04-tui-setup.md](phase-04-tui-setup.md) | 2h | done |
 | 05 | App Integration | [phase-05-app-integration.md](phase-05-app-integration.md) | 1h | pending |
 
 ## Architecture
