@@ -6,7 +6,7 @@ Nginx vhost configuration generation and management. Each site gets a server blo
 ## Overview
 - **Effort**: 4h
 - **Priority**: P1
-- **Status**: pending
+- **Status**: DONE (completed: 2026-03-02)
 - **Depends on**: Phase 01, Phase 02
 
 ## Key Insights
@@ -147,14 +147,25 @@ templates/nginx-ssl.conf.tmpl       # SSL snippet included conditionally
 10. **Error handling**: If `nginx -t` fails after create, rollback (remove config, restore previous)
 
 ## Todo
-- [ ] Laravel vhost template
-- [ ] WordPress vhost template
-- [ ] SSL snippet template (placeholder for Phase 06)
-- [ ] Nginx Manager CRUD
-- [ ] `nginx -t` integration with error parsing
-- [ ] Rollback on failed config test
-- [ ] TUI vhost list screen
-- [ ] Unit tests with mock executor
+- [x] Laravel vhost template
+- [x] WordPress vhost template
+- [x] SSL snippet template (placeholder for Phase 06)
+- [x] Nginx Manager CRUD
+- [x] `nginx -t` integration with error parsing
+- [x] Rollback on failed config test
+- [x] TUI vhost list screen
+- [x] Unit tests with mock executor
+
+## Known Issues (from code review)
+- nginx.Manager.Enable/Disable/Delete lack domain validation — path traversal risk if called directly
+- Rollback errors silently discarded in Manager.Create
+- site.Manager.Delete ignores nginx/PHP-FPM errors on deletion
+- os.ReadDir used directly in List() instead of FileManager interface
+- ProjectType duplicated in nginx package (import cycle workaround) — tech debt
+- TUI nginx actions are TODO stubs; nginx.Manager not wired into app.go yet
+
+## Next Steps
+Phase 04 (PHP Management) creates PHP-FPM pool configs referenced by socket paths here.
 
 ## Success Criteria
 - Generated vhost passes `nginx -t`

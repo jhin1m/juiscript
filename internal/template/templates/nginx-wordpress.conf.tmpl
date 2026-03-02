@@ -1,0 +1,50 @@
+{{/* Nginx virtual host for WordPress projects */}}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ .Domain }} www.{{ .Domain }};
+    root {{ .WebRoot }};
+    index index.php index.html;
+
+    access_log {{ .AccessLog }};
+    error_log {{ .ErrorLog }};
+
+    client_max_body_size {{ .MaxBodySize }};
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # WordPress permalink rewrite
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    # PHP-FPM via Unix socket
+    location ~ \.php$ {
+        fastcgi_pass unix:{{ .PHPSocket }};
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    # WordPress static assets - long cache, no logging
+    location = /favicon.ico { log_not_found off; access_log off; }
+    location = /robots.txt  { log_not_found off; access_log off; allow all; }
+
+    location ~* \.(css|gif|ico|jpeg|jpg|js|png|svg|woff|woff2|ttf|eot)$ {
+        expires max;
+        log_not_found off;
+    }
+
+    # Deny access to hidden files except .well-known
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+{{ if .ExtraConfig }}
+    # Custom directives
+{{ .ExtraConfig }}
+{{ end }}
+}

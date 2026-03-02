@@ -106,13 +106,37 @@ Three core interfaces for testability (no root in tests):
 - `supervisor.worker.tmpl`: Queue worker config
 - All embedded in binary (no file dependency)
 
-### Layer 5: Domain Logic (Future)
+### Layer 5: Domain Logic
 
-Planned packages for feature implementation:
+**Implemented Packages**:
 
-- **site/**: Site creation, deletion, metadata storage
-- **nginx/**: Vhost generation, enable/disable, reload
-- **php/**: Multi-version support, pool management
+1. **nginx/** (Phase 03 - Complete)
+   ```go
+   Manager {
+     Create(cfg VhostConfig) error        // Render template, write, enable, test, reload
+     Delete(domain string) error           // Remove config, disable, reload
+     Enable(domain string) error           // Enable symlink, test, reload
+     Disable(domain string) error          // Disable symlink, reload
+     Test() error                          // nginx -t with error parsing
+     Reload() error                        // systemctl reload nginx
+     List() ([]VhostInfo, error)          // All vhosts with status
+   }
+   ```
+   - Supports Laravel and WordPress templates
+   - SSL configuration support
+   - Atomic operations with rollback on failure
+   - Comprehensive config validation
+   - Error recovery with detailed messages
+
+2. **site/** (Phase 02 - Partial)
+   - Site creation/deletion lifecycle
+   - Integrates with nginx.Manager for vhost setup
+   - Linux user account management
+   - Metadata storage
+
+**Planned Packages**:
+
+- **php/**: Multi-version support, pool management per site
 - **database/**: MariaDB user/database operations
 - **ssl/**: Let's Encrypt integration via certbot
 - **backup/**: Full/partial backups, retention, restore
@@ -121,7 +145,28 @@ Planned packages for feature implementation:
 
 ## Data Flow
 
-### Site Creation Sequence
+### Vhost Creation Sequence (Phase 03)
+```
+TUI Nginx Screen [Triggered from Site Manager]
+    ↓
+nginx.Manager.Create(VhostConfig)
+    ↓
+Template.Render [Select template based on ProjectType]
+    ↓
+FileManager.WriteAtomic [Write config to sites-available]
+    ↓
+FileManager.Symlink [Enable in sites-enabled]
+    ↓
+Manager.Test() [nginx -t validation]
+    ↓
+On Failure: Rollback (disable + remove)
+    ↓
+Manager.Reload() [systemctl reload nginx]
+    ↓
+Success: Config live on all workers
+```
+
+### Site Creation Sequence (Phase 02)
 ```
 TUI Screen [Input site name, domain, PHP version]
     ↓
@@ -129,11 +174,7 @@ Site Service [Validate, check conflicts]
     ↓
 UserManager.Create [Create Linux user account]
     ↓
-FileManager.WriteAtomic [Write Nginx vhost config]
-    ↓
-FileManager.Symlink [Enable site in Nginx]
-    ↓
-Executor.Run [Reload Nginx]
+nginx.Manager.Create [Write Nginx vhost config]
     ↓
 Config.Save [Update config metadata]
 ```
@@ -171,6 +212,18 @@ Critical configs use atomic writes:
 → Zero chance of partial updates on crash
 ```
 
+### Transaction-Like Vhost Creation
+Nginx manager ensures consistent state:
+```go
+1. Render template from VhostConfig
+2. WriteAtomic to sites-available
+3. Enable symlink to sites-enabled
+4. Test with `nginx -t`
+   If test fails → Rollback (disable + remove file)
+5. Reload only if all steps succeed
+→ Live config always valid, or unchanged if error
+```
+
 ### Error Wrapping
 Always wrap with context:
 ```go
@@ -184,7 +237,7 @@ All templates compiled into binary:
 //go:embed templates/*
 var templateFS embed.FS
 ```
-Single executable, no file dependencies.
+Single executable, no file dependencies. Vhost templates choose framework variant.
 
 ## Security Architecture
 
@@ -227,7 +280,7 @@ Result:
   - No installation required beyond binary
 ```
 
-### Configuration Model
+### Configuration & Template Model
 ```
 /etc/juiscript/
 ├── config.toml          ← User config (optional, loads defaults)
@@ -236,6 +289,21 @@ Result:
 │   └── blog.io.json
 └── ssl/                 ← SSL certs (future)
     └── example.com/
+
+/etc/nginx/
+├── sites-available/     ← All vhost configs
+│   ├── example.com.conf
+│   └── blog.io.conf
+└── sites-enabled/       ← Enabled vhosts (symlinks)
+    ├── example.com.conf → ../sites-available/example.com.conf
+    └── blog.io.conf → ../sites-available/blog.io.conf
+
+Templates (Embedded):
+├── nginx-laravel.conf.tmpl      ← Laravel-specific Nginx config
+├── nginx-wordpress.conf.tmpl    ← WordPress-specific Nginx config
+├── nginx-ssl.conf.tmpl          ← SSL certificate configuration
+├── php-fpm-pool.conf.tmpl       ← PHP-FPM pool per site
+└── supervisor-worker.conf.tmpl  ← Queue worker process management
 ```
 
 ## Scalability Considerations

@@ -26,7 +26,7 @@ Go CLI + Bubble Tea TUI for LEMP server management (Nginx, PHP-FPM, MariaDB, Red
 |---|-------|--------|--------|------|
 | 1 | Core Infrastructure | 6h | pending | [phase-01](phase-01-core-infrastructure.md) |
 | 2 | Site Management | 5h | pending | [phase-02](phase-02-site-management.md) |
-| 3 | Nginx/Vhost | 4h | pending | [phase-03](phase-03-nginx-vhost.md) |
+| 3 | Nginx/Vhost | 4h | done | [phase-03](phase-03-nginx-vhost.md) |
 | 4 | PHP Management | 5h | pending | [phase-04](phase-04-php-management.md) |
 | 5 | Database Management | 4h | pending | [phase-05](phase-05-database-management.md) |
 | 6 | SSL Management | 3h | pending | [phase-06](phase-06-ssl-management.md) |

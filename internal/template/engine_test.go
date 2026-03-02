@@ -17,7 +17,7 @@ func TestNewEngine(t *testing.T) {
 	}
 }
 
-func TestRenderNginxVhost(t *testing.T) {
+func TestRenderNginxLaravelVhost(t *testing.T) {
 	engine, err := New()
 	if err != nil {
 		t.Fatalf("failed to create engine: %v", err)
@@ -25,32 +25,76 @@ func TestRenderNginxVhost(t *testing.T) {
 
 	data := struct {
 		Domain      string
-		Aliases     string
 		WebRoot     string
-		User        string
-		ProjectType string
 		PHPSocket   string
+		AccessLog   string
+		ErrorLog    string
+		MaxBodySize string
+		ExtraConfig string
 	}{
 		Domain:      "example.com",
-		Aliases:     "www.example.com",
 		WebRoot:     "/home/site_example_com/example.com/public",
-		User:        "site_example_com",
-		ProjectType: "laravel",
 		PHPSocket:   "/run/php/php8.3-fpm-site_example_com.sock",
+		AccessLog:   "/home/site_example_com/logs/nginx-access.log",
+		ErrorLog:    "/home/site_example_com/logs/nginx-error.log",
+		MaxBodySize: "64m",
 	}
 
-	result, err := engine.Render("nginx-vhost.conf.tmpl", data)
+	result, err := engine.Render("nginx-laravel.conf.tmpl", data)
 	if err != nil {
 		t.Fatalf("render failed: %v", err)
 	}
 
-	// Verify key parts are present
 	checks := []string{
 		"server_name example.com",
-		"www.example.com",
 		"/home/site_example_com",
-		"try_files $uri $uri/ /index.php?$query_string", // Laravel-specific
+		"try_files $uri $uri/ /index.php?$query_string",
 		"fastcgi_pass unix:/run/php/php8.3-fpm",
+		"client_max_body_size 64m",
+		"X-Frame-Options",
+	}
+
+	for _, check := range checks {
+		if !strings.Contains(result, check) {
+			t.Errorf("expected output to contain %q", check)
+		}
+	}
+}
+
+func TestRenderNginxWordPressVhost(t *testing.T) {
+	engine, err := New()
+	if err != nil {
+		t.Fatalf("failed to create engine: %v", err)
+	}
+
+	data := struct {
+		Domain      string
+		WebRoot     string
+		PHPSocket   string
+		AccessLog   string
+		ErrorLog    string
+		MaxBodySize string
+		ExtraConfig string
+	}{
+		Domain:      "blog.example.com",
+		WebRoot:     "/home/site_blog/public_html/blog.example.com",
+		PHPSocket:   "/run/php/php8.3-fpm-site_blog.sock",
+		AccessLog:   "/home/site_blog/logs/nginx-access.log",
+		ErrorLog:    "/home/site_blog/logs/nginx-error.log",
+		MaxBodySize: "128m",
+	}
+
+	result, err := engine.Render("nginx-wordpress.conf.tmpl", data)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+
+	checks := []string{
+		"server_name blog.example.com www.blog.example.com",
+		"try_files $uri $uri/ /index.php?$args",
+		"favicon.ico",
+		"robots.txt",
+		"client_max_body_size 128m",
 	}
 
 	for _, check := range checks {

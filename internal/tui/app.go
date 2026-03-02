@@ -41,17 +41,18 @@ var screenNames = map[string]Screen{
 // App is the root Bubble Tea model.
 // It acts as a screen router, delegating to child models.
 type App struct {
-	theme      *theme.Theme
-	header     *components.Header
-	statusBar  *components.StatusBar
-	current    Screen
-	previous   Screen // for back navigation from sub-screens
-	dashboard  *screens.Dashboard
-	siteList   *screens.SiteList
-	siteCreate *screens.SiteCreate
-	siteDetail *screens.SiteDetail
-	width      int
-	height     int
+	theme       *theme.Theme
+	header      *components.Header
+	statusBar   *components.StatusBar
+	current     Screen
+	previous    Screen // for back navigation from sub-screens
+	dashboard   *screens.Dashboard
+	siteList    *screens.SiteList
+	siteCreate  *screens.SiteCreate
+	siteDetail  *screens.SiteDetail
+	nginxScreen *screens.NginxScreen
+	width       int
+	height      int
 }
 
 // NewApp creates the root TUI application.
@@ -59,14 +60,15 @@ func NewApp() *App {
 	t := theme.New()
 
 	return &App{
-		theme:      t,
-		header:     components.NewHeader(t),
-		statusBar:  components.NewStatusBar(t),
-		current:    ScreenDashboard,
-		dashboard:  screens.NewDashboard(t),
-		siteList:   screens.NewSiteList(t),
-		siteCreate: screens.NewSiteCreate(t),
-		siteDetail: screens.NewSiteDetail(t),
+		theme:       t,
+		header:      components.NewHeader(t),
+		statusBar:   components.NewStatusBar(t),
+		current:     ScreenDashboard,
+		dashboard:   screens.NewDashboard(t),
+		siteList:    screens.NewSiteList(t),
+		siteCreate:  screens.NewSiteCreate(t),
+		siteDetail:  screens.NewSiteDetail(t),
+		nginxScreen: screens.NewNginxScreen(t),
 	}
 }
 
@@ -130,6 +132,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.DeleteSiteMsg:
 		// TODO: Call site manager to delete
 		return a, nil
+
+	// Nginx screen messages
+	case screens.ToggleVhostMsg:
+		// TODO: Call nginx manager to toggle
+		return a, nil
+
+	case screens.DeleteVhostMsg:
+		// TODO: Call nginx manager to delete
+		return a, nil
+
+	case screens.TestNginxMsg:
+		// TODO: Call nginx manager to test config
+		return a, nil
 	}
 
 	// Delegate to active screen
@@ -164,6 +179,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.siteDetail.Update(msg)
 		a.siteDetail = updated.(*screens.SiteDetail)
 		return cmd
+	case ScreenNginx:
+		updated, cmd := a.nginxScreen.Update(msg)
+		a.nginxScreen = updated.(*screens.NginxScreen)
+		return cmd
 	default:
 		return nil
 	}
@@ -182,6 +201,8 @@ func (a *App) View() string {
 		content = a.siteCreate.View()
 	case ScreenSiteDetail:
 		content = a.siteDetail.View()
+	case ScreenNginx:
+		content = a.nginxScreen.View()
 	default:
 		content = a.theme.Subtitle.Render(
 			fmt.Sprintf("\n  [%s] screen - Coming soon...\n\n  Press 'esc' to go back",
@@ -228,6 +249,14 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "enter", Desc: "next"},
 			{Key: "tab", Desc: "cycle"},
 			{Key: "esc", Desc: "cancel"},
+		}, base...)
+	case ScreenNginx:
+		return append([]components.KeyBinding{
+			{Key: "j/k", Desc: "navigate"},
+			{Key: "e", Desc: "enable/disable"},
+			{Key: "d", Desc: "delete"},
+			{Key: "t", Desc: "test config"},
+			{Key: "esc", Desc: "back"},
 		}, base...)
 	default:
 		return append([]components.KeyBinding{

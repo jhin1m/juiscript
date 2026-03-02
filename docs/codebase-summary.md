@@ -18,6 +18,11 @@ juiscript/
 │   ├── template/
 │   │   ├── engine.go           # Template engine, embedded fs
 │   │   └── engine_test.go
+│   ├── nginx/
+│   │   ├── manager.go          # Vhost CRUD, test, reload, enable/disable
+│   │   └── manager_test.go
+│   ├── site/
+│   │   └── manager.go          # Site lifecycle (uses nginx.Manager)
 │   └── tui/
 │       ├── app.go              # Root model & screen router
 │       ├── components/
@@ -26,8 +31,14 @@ juiscript/
 │       │   └── theme/
 │       │       └── theme.go    # Color scheme & styles
 │       └── screens/
-│           └── dashboard.go    # Dashboard screen
-├── templates/                  # Embedded config templates (future)
+│           ├── dashboard.go    # Dashboard screen
+│           └── nginx.go        # Nginx vhost management screen
+├── templates/
+│   ├── nginx-laravel.conf.tmpl     # Laravel vhost template
+│   ├── nginx-wordpress.conf.tmpl   # WordPress vhost template
+│   ├── nginx-ssl.conf.tmpl         # SSL vhost template
+│   ├── php-fpm-pool.conf.tmpl      # PHP-FPM pool template
+│   └── supervisor-worker.conf.tmpl # Queue worker template
 ├── Makefile                    # Build targets
 └── README.md                   # Quick start guide
 ```
@@ -126,6 +137,41 @@ Config
 - List selection with 'j'/'k' navigation
 - 'enter' emits NavigateMsg to router
 - Shows feature descriptions
+
+### internal/nginx/manager.go (268 lines)
+**Purpose**: Nginx vhost CRUD and reload management
+- Vhost creation from templates with validation
+- Enable/disable via symlinks in sites-available/sites-enabled
+- Config testing via `nginx -t` with error parsing
+- Rollback on failure (atomic operations)
+- List vhosts with enabled status
+- Delete vhosts with cleanup
+- Reload Nginx via systemctl
+
+**Key Types**:
+```go
+ProjectType = "laravel" | "wordpress"
+
+VhostConfig {
+  Domain, WebRoot, PHPSocket, AccessLog, ErrorLog
+  SSLEnabled, SSLCertPath, SSLKeyPath
+  ProjectType, MaxBodySize, ExtraConfig
+}
+
+VhostInfo { Domain, Enabled, Path }
+
+Manager {
+  executor, files, tpl
+  sitesAvailable, sitesEnabled
+}
+```
+
+### internal/tui/screens/nginx.go (143 lines)
+**Purpose**: TUI screen for vhost management
+- List all vhosts with enabled/disabled status
+- Keyboard: 'k'/'j' navigate, 'e' toggle, 'd' delete, 't' test config
+- Error display and empty state handling
+- Table view with Domain, Status, Path columns
 
 ### Makefile (50 lines)
 **Purpose**: Build automation
@@ -227,13 +273,18 @@ UserManager {
 - **Testing**: No root required (interfaces mocked)
 - **Logging**: Structured slog throughout
 
+## Phase Completion Status
+
+**Phase 01 - Infrastructure**: Config, system abstractions, template engine, basic TUI ✓
+**Phase 02 - Site Management**: Site lifecycle manager, site creation/deletion ✓
+**Phase 03 - Nginx/Vhost**: Manager CRUD, templates, TUI screen, enable/disable ✓
+
 ## Future Additions
 
-- Site management (create/delete/list)
-- Nginx vhost generation & enabling
 - PHP-FPM pool per site
 - MariaDB user/database management
-- SSL certificate automation
+- SSL certificate automation via certbot
 - Backup scheduling & execution
 - Supervisor queue worker management
-- Additional screens for all features
+- Service control screens (stop/start/restart)
+- System monitoring and health checks
