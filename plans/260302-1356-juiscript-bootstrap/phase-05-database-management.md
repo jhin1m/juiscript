@@ -6,7 +6,7 @@ MariaDB database and user management. Each site optionally gets its own database
 ## Overview
 - **Effort**: 4h
 - **Priority**: P2
-- **Status**: pending
+- **Status**: done (2026-03-02)
 - **Depends on**: Phase 01
 
 ## Key Insights
@@ -81,15 +81,16 @@ internal/tui/screens/database.go
 11. **TUI database screen**: List DBs with size, actions (create/drop/import/export)
 
 ## Todo
-- [ ] Manager with socket auth
-- [ ] CreateDB / DropDB
-- [ ] CreateUser / DropUser / ResetPassword
-- [ ] ListDBs with size info
-- [ ] Import (plain + gzip)
-- [ ] Export with gzip
-- [ ] Password generator
-- [ ] TUI database screen
-- [ ] Unit tests with mock executor
+- [x] Manager with socket auth
+- [x] CreateDB / DropDB
+- [x] CreateUser / DropUser / ResetPassword
+- [x] ListDBs with size info
+- [x] Import (plain + gzip)
+- [x] Export with gzip
+- [x] Password generator
+- [x] TUI database screen
+- [x] Unit tests with mock executor
+- [ ] Wire DB manager actions into app.go (CreateDBMsg, DropDBMsg, ImportDBMsg, ExportDBMsg handlers)
 
 ## Success Criteria
 - Create DB + user in one operation, credentials returned

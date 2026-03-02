@@ -51,9 +51,10 @@ type App struct {
 	siteCreate  *screens.SiteCreate
 	siteDetail  *screens.SiteDetail
 	nginxScreen *screens.NginxScreen
-	phpScreen  *screens.PHPScreen
-	width       int
-	height      int
+	phpScreen      *screens.PHPScreen
+	databaseScreen *screens.DatabaseScreen
+	width          int
+	height         int
 }
 
 // NewApp creates the root TUI application.
@@ -70,7 +71,8 @@ func NewApp() *App {
 		siteCreate:  screens.NewSiteCreate(t),
 		siteDetail:  screens.NewSiteDetail(t),
 		nginxScreen: screens.NewNginxScreen(t),
-		phpScreen:  screens.NewPHPScreen(t),
+		phpScreen:      screens.NewPHPScreen(t),
+		databaseScreen: screens.NewDatabaseScreen(t),
 	}
 }
 
@@ -156,6 +158,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.RemovePHPMsg:
 		// TODO: Call PHP manager to remove version
 		return a, nil
+
+	// Database screen messages
+	case screens.CreateDBMsg:
+		// TODO: Call database manager to create DB
+		return a, nil
+
+	case screens.DropDBMsg:
+		// TODO: Call database manager to drop DB
+		return a, nil
+
+	case screens.ImportDBMsg:
+		// TODO: Call database manager to import
+		return a, nil
+
+	case screens.ExportDBMsg:
+		// TODO: Call database manager to export
+		return a, nil
 	}
 
 	// Delegate to active screen
@@ -198,6 +217,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.phpScreen.Update(msg)
 		a.phpScreen = updated.(*screens.PHPScreen)
 		return cmd
+	case ScreenDatabase:
+		updated, cmd := a.databaseScreen.Update(msg)
+		a.databaseScreen = updated.(*screens.DatabaseScreen)
+		return cmd
 	default:
 		return nil
 	}
@@ -220,6 +243,8 @@ func (a *App) View() string {
 		content = a.nginxScreen.View()
 	case ScreenPHP:
 		content = a.phpScreen.View()
+	case ScreenDatabase:
+		content = a.databaseScreen.View()
 	default:
 		content = a.theme.Subtitle.Render(
 			fmt.Sprintf("\n  [%s] screen - Coming soon...\n\n  Press 'esc' to go back",
@@ -280,6 +305,15 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "j/k", Desc: "navigate"},
 			{Key: "i", Desc: "install"},
 			{Key: "r", Desc: "remove"},
+			{Key: "esc", Desc: "back"},
+		}, base...)
+	case ScreenDatabase:
+		return append([]components.KeyBinding{
+			{Key: "j/k", Desc: "navigate"},
+			{Key: "c", Desc: "create"},
+			{Key: "d", Desc: "drop"},
+			{Key: "i", Desc: "import"},
+			{Key: "e", Desc: "export"},
 			{Key: "esc", Desc: "back"},
 		}, base...)
 	default:

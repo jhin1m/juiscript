@@ -27,6 +27,12 @@ juiscript/
 │   │   └── manager_test.go     # 19 unit tests
 │   ├── site/
 │   │   └── manager.go          # Site lifecycle (uses nginx.Manager)
+│   ├── database/
+│   │   ├── manager.go          # Manager struct, validation, password gen
+│   │   ├── database-operations.go # CreateDB/DropDB/ListDBs
+│   │   ├── user-operations.go  # CreateUser/DropUser/ResetPassword
+│   │   ├── import-export.go    # Import/Export with streaming
+│   │   └── manager_test.go     # 20 unit tests
 │   └── tui/
 │       ├── app.go              # Root model & screen router
 │       ├── components/
@@ -37,7 +43,8 @@ juiscript/
 │       └── screens/
 │           ├── dashboard.go    # Dashboard screen
 │           ├── nginx.go        # Nginx vhost management screen
-│           └── php.go          # PHP version management screen
+│           ├── php.go          # PHP version management screen
+│           └── database.go     # Database management screen
 ├── templates/
 │   ├── nginx-laravel.conf.tmpl     # Laravel vhost template
 │   ├── nginx-wordpress.conf.tmpl   # WordPress vhost template
@@ -225,6 +232,69 @@ PoolConfig {
 - Color-coded status: running/stopped (green/red), enabled/disabled
 - Messages: InstallPHPMsg, RemovePHPMsg for app routing
 
+### internal/database/manager.go (80 lines)
+**Purpose**: Database management foundation
+- Manager struct wraps Executor for MariaDB operations
+- Validation regex: `^[a-z][a-z0-9_]{0,63}$` (lowercase, alphanumeric, underscore)
+- GeneratePassword: Cryptographically secure 24-char passwords (default length)
+- Socket authentication (no password needed as root)
+- System database protection: information_schema, mysql, performance_schema, sys
+
+**Key Types**:
+```go
+DBInfo {
+  Name string       // Database name
+  SizeMB float64    // Total size in MB
+  Tables int        // Table count
+}
+
+Manager {
+  executor Executor  // For running mysql commands
+}
+```
+
+### internal/database/database-operations.go (71 lines)
+**Purpose**: Database CRUD operations
+- CreateDB: Creates UTF-8MB4 database with unicode collation
+- DropDB: Drops user database (prevents system DB deletion)
+- ListDBs: Returns all databases with size/table metadata
+- Uses information_schema for size/table metrics
+- Error wrapping for context
+
+### internal/database/user-operations.go (81 lines)
+**Purpose**: Database user lifecycle management
+- CreateUser: Creates user with full privileges on database, returns 24-char password
+- DropUser: Revokes privileges, drops user, flushes privileges
+- ResetPassword: Generates new password, updates user, returns password
+- All operations scoped to 'localhost' for security
+- Batch operations to prevent partial state
+
+### internal/database/import-export.go (89 lines)
+**Purpose**: Database backup/restore via streaming
+- Import: Loads SQL file (uncompressed or gzip) into database
+- Export: Dumps database via mysqldump (uncompressed or gzip)
+- Streaming commands to handle large files without memory issues
+- 10-minute timeout for import/export operations
+- Path validation: Rejects shell metacharacters, prevents injection
+- Export uses --single-transaction for consistent snapshots without locks
+
+### internal/database/manager_test.go (varies)
+**Purpose**: 20 unit tests for database operations
+- Tests for validation (name format, system DB protection)
+- Password generation tests
+- CRUD tests with mocked executor
+- Import/export path validation
+- Edge cases: empty names, invalid characters, system databases
+
+### internal/tui/screens/database.go (144 lines)
+**Purpose**: TUI screen for database management
+- Lists databases with size (MB) and table count
+- Table view: DATABASE | SIZE | TABLES columns
+- Keyboard: 'k'/'j' navigate, 'c' create, 'd' drop, 'i' import, 'e' export
+- Error display for failed operations
+- Messages: CreateDBMsg, DropDBMsg, ImportDBMsg, ExportDBMsg for app routing
+- Empty state with help text
+
 ### Makefile (50 lines)
 **Purpose**: Build automation
 - build: Current platform
@@ -331,6 +401,7 @@ UserManager {
 **Phase 02 - Site Management**: Site lifecycle manager, site creation/deletion ✓
 **Phase 03 - Nginx/Vhost**: Manager CRUD, templates, TUI screen, enable/disable ✓
 **Phase 04 - PHP Management**: Version install/remove/list, FPM pool CRUD, version switch, TUI screen ✓
+**Phase 05 - Database Management**: Manager CRUD, user ops, import/export, TUI screen, 20 unit tests ✓
 
 ## PHP Management Implementation Details
 
@@ -355,9 +426,35 @@ UserManager {
 - PHP execution restricted via open_basedir
 - Security extensions limited to .php files
 
+## Database Management Implementation Details
+
+### Validation & Security
+- **Name Format**: `^[a-z][a-z0-9_]{0,63}$` (64 chars max, lowercase, alphanumeric, underscore)
+- **System DB Protection**: Prevents dropping critical databases
+- **SQL Injection Prevention**: Name validation + backtick escaping for identifiers
+- **Password Security**: 24-char randomized with 74-char charset (letters, digits, symbols)
+- **Authentication**: Socket auth as root (no password transmitted)
+
+### User & Database Operations
+- **CreateUser**: Single batch statement (create + grant + flush)
+- **DropUser**: Revokes privileges before drop for safety
+- **CreateDB**: UTF-8MB4 charset, Unicode collation for i18n
+- **Password Reset**: Generates new password, updates in one statement
+
+### Import/Export Features
+- **Import**: Supports plain SQL and gzip-compressed files
+- **Export**: Single-transaction snapshots (no table locks)
+- **Streaming**: Pipes large files via shell to avoid memory bloat
+- **Path Validation**: Regex rejects shell metacharacters (`/ . - _` allowed)
+- **Timeout**: 10-minute limit for long-running operations
+
+### Database Metadata
+- **Size Calculation**: information_schema.TABLES (data + index length)
+- **Table Count**: Per-database table enumeration
+- **System DB Filtering**: Automatic exclusion in ListDBs output
+
 ## Future Additions
 
-- MariaDB user/database management
 - SSL certificate automation via certbot
 - Backup scheduling & execution
 - Supervisor queue worker management
