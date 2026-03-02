@@ -1,0 +1,36 @@
+{{/* Nginx virtual host configuration template */}}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ .Domain }}{{ if .Aliases }} {{ .Aliases }}{{ end }};
+
+    root {{ .WebRoot }};
+    index index.php index.html;
+
+    access_log /home/{{ .User }}/logs/nginx-access.log;
+    error_log /home/{{ .User }}/logs/nginx-error.log;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location / {
+{{- if eq .ProjectType "laravel" }}
+        try_files $uri $uri/ /index.php?$query_string;
+{{- else }}
+        try_files $uri $uri/ /index.php?$args;
+{{- end }}
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:{{ .PHPSocket }};
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    # Deny access to hidden files
+    location ~ /\. {
+        deny all;
+    }
+}

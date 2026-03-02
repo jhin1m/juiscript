@@ -15,7 +15,6 @@
 
 # Dependency directories
 vendor/
-go.sum
 
 # Go workspace file
 go.work

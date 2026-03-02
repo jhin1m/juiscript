@@ -1,0 +1,26 @@
+{{/* PHP-FPM pool configuration per site */}}
+[{{ .PoolName }}]
+user = {{ .User }}
+group = {{ .User }}
+
+listen = {{ .SocketPath }}
+listen.owner = {{ .User }}
+listen.group = www-data
+listen.mode = 0660
+
+; Process manager: dynamic adjusts workers based on traffic
+pm = dynamic
+pm.max_children = {{ .MaxChildren }}
+pm.start_servers = {{ .StartServers }}
+pm.min_spare_servers = {{ .MinSpare }}
+pm.max_spare_servers = {{ .MaxSpare }}
+pm.max_requests = 500
+
+; Logging
+php_admin_value[error_log] = /home/{{ .User }}/logs/php-error.log
+php_admin_flag[log_errors] = on
+
+; Security: restrict to site directory
+php_admin_value[open_basedir] = /home/{{ .User }}:/tmp:/usr/share/php
+php_admin_value[sys_temp_dir] = /home/{{ .User }}/tmp
+php_admin_value[upload_tmp_dir] = /home/{{ .User }}/tmp
