@@ -1,0 +1,85 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.coverage
+
+# Dependency directories
+vendor/
+go.sum
+
+# Go workspace file
+go.work
+
+# Build artifacts
+bin/
+dist/
+build/
+*.o
+*.a
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+.project
+.classpath
+.c9/
+*.sublime-project
+*.sublime-workspace
+.netrc
+
+# OS specific
+Thumbs.db
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs
+*.code-workspace
+
+# GoLand
+.idea/
+*.iml
+
+# GoVim
+.idea/
+.vscode/
+
+# Covers JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Air - Live reload for Go
+tmp/
+
+# General ignore patterns
+*.pem
+*.key
+!.gitkeep
