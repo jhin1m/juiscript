@@ -182,12 +182,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case DetectPackagesMsg:
-		// Cache detection results, update dashboard + setup screen
+		// Count missing: group all PHP versions as 1 item
 		missing := 0
+		phpMissing := false
 		for _, pkg := range msg.Packages {
 			if !pkg.Installed {
-				missing++
+				if pkg.Name == "php" {
+					phpMissing = true
+				} else {
+					missing++
+				}
 			}
+		}
+		if phpMissing {
+			missing++
 		}
 		a.dashboard.SetMissingCount(missing)
 		a.setupScreen.SetPackages(msg.Packages)

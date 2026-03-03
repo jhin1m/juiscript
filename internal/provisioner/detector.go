@@ -28,6 +28,9 @@ var staticPackages = []struct {
 	{"redis", "Redis", "redis-server"},
 }
 
+// defaultPHPVersions are shown when no PHP is installed on the system.
+var defaultPHPVersions = []string{"7.4", "8.0", "8.1", "8.2", "8.3", "8.4"}
+
 // Detector checks which LEMP packages are installed on the system.
 // Uses dpkg-query for package detection and /etc/php/ scan for PHP versions.
 type Detector struct {
@@ -55,27 +58,19 @@ func (d *Detector) DetectAll(ctx context.Context) ([]PackageInfo, error) {
 		})
 	}
 
-	// Detect installed PHP versions from /etc/php/ directory
-	phpVersions := d.detectPHPVersions()
-	if len(phpVersions) > 0 {
-		for _, ver := range phpVersions {
-			pkg := "php" + ver + "-fpm"
-			installed, version := isPackageInstalled(ctx, d.executor, pkg)
-			results = append(results, PackageInfo{
-				Name:        "php",
-				DisplayName: "PHP " + ver,
-				Package:     pkg,
-				Installed:   installed,
-				Version:     version,
-			})
-		}
-	} else {
-		// No PHP found — single placeholder entry for the TUI checklist
+	// Always show all default PHP versions, plus any extra detected ones.
+	// This ensures versions remain selectable after installing one.
+	phpVersions := d.mergedPHPVersions()
+
+	for _, ver := range phpVersions {
+		pkg := "php" + ver + "-fpm"
+		installed, version := isPackageInstalled(ctx, d.executor, pkg)
 		results = append(results, PackageInfo{
 			Name:        "php",
-			DisplayName: "PHP",
-			Package:     "",
-			Installed:   false,
+			DisplayName: "PHP " + ver,
+			Package:     pkg,
+			Installed:   installed,
+			Version:     version,
 		})
 	}
 
@@ -100,6 +95,26 @@ func (d *Detector) detectPHPVersions() []string {
 		}
 	}
 	return versions
+}
+
+// mergedPHPVersions returns all default PHP versions plus any extra detected versions.
+// Ensures users can always install new versions even after installing one.
+func (d *Detector) mergedPHPVersions() []string {
+	detected := d.detectPHPVersions()
+
+	seen := make(map[string]bool)
+	var merged []string
+	for _, v := range defaultPHPVersions {
+		seen[v] = true
+		merged = append(merged, v)
+	}
+	// Add any extra detected versions not in defaults
+	for _, v := range detected {
+		if !seen[v] {
+			merged = append(merged, v)
+		}
+	}
+	return merged
 }
 
 // isVersionDir checks if a name matches PHP version format (e.g. "8.3", "7.4").

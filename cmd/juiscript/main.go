@@ -7,9 +7,11 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/php"
 	"github.com/jhin1m/juiscript/internal/provisioner"
 	"github.com/jhin1m/juiscript/internal/service"
 	"github.com/jhin1m/juiscript/internal/system"
+	"github.com/jhin1m/juiscript/internal/template"
 	"github.com/jhin1m/juiscript/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -56,8 +58,11 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	}
 
 	exec := system.NewExecutor(logger)
+	fileMgr := system.NewFileManager()
+	tplEngine, _ := template.New() // template engine for PHP-FPM pool configs
+	phpMgr := php.NewManager(exec, fileMgr, tplEngine)
 	svcMgr := service.NewManager(exec)
-	prov := provisioner.NewProvisioner(exec, nil) // PHP manager created later when needed
+	prov := provisioner.NewProvisioner(exec, phpMgr)
 	app := tui.NewApp(svcMgr, prov)
 
 	// tea.WithAltScreen uses the alternate terminal buffer

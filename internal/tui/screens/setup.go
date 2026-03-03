@@ -44,13 +44,25 @@ type progressLine struct {
 // --- SetupScreen ---
 
 // SetupScreen is the TUI screen for detecting and installing LEMP packages.
-// Uses a 4-state machine: checklist → confirm → installing → done.
+// Static packages (Nginx, MariaDB, Redis) are shown at top-level.
+// PHP versions are grouped under a submenu item.
 type SetupScreen struct {
-	theme    *theme.Theme
-	state    setupState
-	packages []provisioner.PackageInfo
-	selected map[int]bool // index → selected
+	theme *theme.Theme
+	state setupState
+
+	// Separated package groups
+	staticPkgs []provisioner.PackageInfo // nginx, mariadb, redis
+	phpPkgs    []provisioner.PackageInfo // PHP versions
+
+	// Top-level: staticPkgs + PHP group item (last)
 	cursor   int
+	selected map[int]bool // static package index → selected
+
+	// PHP submenu
+	inPHPSub    bool
+	phpCursor   int
+	phpSelected map[int]bool // PHP package index → selected
+
 	spinner  spinner.Model
 	progress []progressLine
 	summary  *provisioner.InstallSummary
@@ -65,24 +77,41 @@ func NewSetupScreen(t *theme.Theme) *SetupScreen {
 	sp.Style = lipgloss.NewStyle().Foreground(theme.Primary)
 
 	return &SetupScreen{
-		theme:    t,
-		selected: make(map[int]bool),
-		spinner:  sp,
+		theme:       t,
+		selected:    make(map[int]bool),
+		phpSelected: make(map[int]bool),
+		spinner:     sp,
 	}
 }
 
-// SetPackages populates the screen with detection results.
-// Pre-selects all missing (not installed) packages.
+// SetPackages splits detection results into static and PHP groups.
+// Pre-selects missing static packages. PHP versions are not pre-selected
+// since users explicitly enter the submenu to choose.
 func (s *SetupScreen) SetPackages(pkgs []provisioner.PackageInfo) {
-	s.packages = pkgs
+	// Don't reset if user is already confirming or installing
+	if s.state != stateChecklist && s.state != stateDone && len(s.staticPkgs) > 0 {
+		return
+	}
+
+	s.staticPkgs = nil
+	s.phpPkgs = nil
 	s.selected = make(map[int]bool)
+	s.phpSelected = make(map[int]bool)
 	s.cursor = 0
+	s.phpCursor = 0
+	s.inPHPSub = false
 	s.state = stateChecklist
 
-	// Pre-select missing packages
-	for i, pkg := range pkgs {
-		if !pkg.Installed {
-			s.selected[i] = true
+	for _, pkg := range pkgs {
+		if pkg.Name == "php" {
+			s.phpPkgs = append(s.phpPkgs, pkg)
+		} else {
+			idx := len(s.staticPkgs)
+			s.staticPkgs = append(s.staticPkgs, pkg)
+			// Pre-select missing static packages
+			if !pkg.Installed {
+				s.selected[idx] = true
+			}
 		}
 	}
 }
@@ -131,49 +160,106 @@ func (s *SetupScreen) ScreenTitle() string {
 	return "Setup"
 }
 
+// topLevelCount = static packages + 1 PHP group item
+func (s *SetupScreen) topLevelCount() int {
+	return len(s.staticPkgs) + 1
+}
+
+// isOnPHPGroup returns true when cursor is on the PHP group item
+func (s *SetupScreen) isOnPHPGroup() bool {
+	return s.cursor == len(s.staticPkgs)
+}
+
 // --- Checklist state ---
 
 func (s *SetupScreen) updateChecklist(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "up", "k":
-			if s.cursor > 0 {
-				s.cursor--
-			}
-		case "down", "j":
-			if s.cursor < len(s.packages)-1 {
-				s.cursor++
-			}
-		case " ":
-			// Toggle selection (only for uninstalled packages)
-			if !s.packages[s.cursor].Installed {
-				s.selected[s.cursor] = !s.selected[s.cursor]
-			}
-		case "enter":
-			names := s.selectedNames()
-			if len(names) > 0 {
-				s.state = stateConfirm
-			}
-		case "esc":
-			return s, func() tea.Msg { return GoBackMsg{} }
+		if s.inPHPSub {
+			return s.updatePHPSubmenu(msg)
 		}
+		return s.updateTopLevel(msg)
+	}
+	return s, nil
+}
+
+// updateTopLevel handles keys for the main checklist (static packages + PHP group)
+func (s *SetupScreen) updateTopLevel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if s.cursor > 0 {
+			s.cursor--
+		}
+	case "down", "j":
+		if s.cursor < s.topLevelCount()-1 {
+			s.cursor++
+		}
+	case " ":
+		// Toggle selection — only for static uninstalled packages, not PHP group
+		if !s.isOnPHPGroup() && !s.staticPkgs[s.cursor].Installed {
+			s.selected[s.cursor] = !s.selected[s.cursor]
+		}
+	case "enter", "right", "l":
+		if s.isOnPHPGroup() {
+			// Enter PHP submenu
+			s.inPHPSub = true
+			return s, nil
+		}
+		// Confirm selection if anything is selected
+		names := s.selectedNames()
+		if len(names) > 0 {
+			s.state = stateConfirm
+		}
+	case "esc":
+		return s, func() tea.Msg { return GoBackMsg{} }
+	}
+	return s, nil
+}
+
+// updatePHPSubmenu handles keys inside the PHP version submenu
+func (s *SetupScreen) updatePHPSubmenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if s.phpCursor > 0 {
+			s.phpCursor--
+		}
+	case "down", "j":
+		if s.phpCursor < len(s.phpPkgs)-1 {
+			s.phpCursor++
+		}
+	case " ":
+		// Toggle PHP version selection (only uninstalled)
+		if !s.phpPkgs[s.phpCursor].Installed {
+			s.phpSelected[s.phpCursor] = !s.phpSelected[s.phpCursor]
+		}
+	case "esc", "left", "h":
+		// Back to top-level
+		s.inPHPSub = false
 	}
 	return s, nil
 }
 
 func (s *SetupScreen) viewChecklist() string {
+	if s.inPHPSub {
+		return s.viewPHPSubmenu()
+	}
+	return s.viewTopLevel()
+}
+
+// viewTopLevel renders static packages + PHP group item
+func (s *SetupScreen) viewTopLevel() string {
 	title := s.theme.Title.Render("Server Setup")
 	subtitle := s.theme.Subtitle.Render("Select packages to install")
 
 	var items string
-	for i, pkg := range s.packages {
+
+	// Static packages
+	for i, pkg := range s.staticPkgs {
 		cursor := "  "
 		if i == s.cursor {
 			cursor = "> "
 		}
 
-		// Checkbox
 		check := "[ ]"
 		if pkg.Installed {
 			check = s.theme.OkText.Render("[✓]")
@@ -181,7 +267,6 @@ func (s *SetupScreen) viewChecklist() string {
 			check = s.theme.Active.Render("[x]")
 		}
 
-		// Package name + status
 		name := pkg.DisplayName
 		var status string
 		if pkg.Installed {
@@ -198,7 +283,92 @@ func (s *SetupScreen) viewChecklist() string {
 		items += fmt.Sprintf("%s%s %s%s\n", cursor, check, name, status)
 	}
 
-	help := s.theme.HelpDesc.Render("\n  space: toggle  enter: confirm  esc: back")
+	// PHP group item with summary
+	phpIdx := len(s.staticPkgs)
+	cursor := "  "
+	if s.cursor == phpIdx {
+		cursor = "> "
+	}
+
+	phpSummary := s.phpGroupSummary()
+	phpLabel := "PHP Versions ▸"
+	if s.cursor == phpIdx {
+		phpLabel = s.theme.Active.Render(phpLabel)
+	}
+	items += fmt.Sprintf("%s    %s  %s\n", cursor, phpLabel, s.theme.Subtitle.Render(phpSummary))
+
+	help := s.theme.HelpDesc.Render("\n  space: toggle  enter: confirm/open  esc: back")
+	return lipgloss.JoinVertical(lipgloss.Left, title, subtitle, "", items, help)
+}
+
+// phpGroupSummary returns a summary like "2 selected, 3 available"
+func (s *SetupScreen) phpGroupSummary() string {
+	installed := 0
+	selected := 0
+	available := 0
+	for i, pkg := range s.phpPkgs {
+		if pkg.Installed {
+			installed++
+		} else {
+			available++
+			if s.phpSelected[i] {
+				selected++
+			}
+		}
+	}
+
+	var parts []string
+	if installed > 0 {
+		parts = append(parts, fmt.Sprintf("%d installed", installed))
+	}
+	if selected > 0 {
+		parts = append(parts, fmt.Sprintf("%d selected", selected))
+	}
+	if available > 0 {
+		parts = append(parts, fmt.Sprintf("%d available", available))
+	}
+	if len(parts) == 0 {
+		return "no versions"
+	}
+	return strings.Join(parts, ", ")
+}
+
+// viewPHPSubmenu renders the PHP version selection list
+func (s *SetupScreen) viewPHPSubmenu() string {
+	title := s.theme.Title.Render("PHP Versions")
+	subtitle := s.theme.Subtitle.Render("Select PHP versions to install")
+
+	var items string
+	for i, pkg := range s.phpPkgs {
+		cursor := "  "
+		if i == s.phpCursor {
+			cursor = "> "
+		}
+
+		check := "[ ]"
+		if pkg.Installed {
+			check = s.theme.OkText.Render("[✓]")
+		} else if s.phpSelected[i] {
+			check = s.theme.Active.Render("[x]")
+		}
+
+		name := pkg.DisplayName
+		var status string
+		if pkg.Installed {
+			name = s.theme.Inactive.Render(name)
+			status = s.theme.OkText.Render(fmt.Sprintf(" (installed %s)", pkg.Version))
+		} else {
+			status = s.theme.ErrorText.Render(" (missing)")
+		}
+
+		if i == s.phpCursor {
+			name = s.theme.Active.Render(pkg.DisplayName)
+		}
+
+		items += fmt.Sprintf("%s%s %s%s\n", cursor, check, name, status)
+	}
+
+	help := s.theme.HelpDesc.Render("\n  space: toggle  esc: back to setup")
 	return lipgloss.JoinVertical(lipgloss.Left, title, subtitle, "", items, help)
 }
 
@@ -367,21 +537,26 @@ func (s *SetupScreen) viewDone() string {
 
 // --- Helpers ---
 
-// selectedNames returns package names for all selected (uninstalled) packages.
+// selectedNames returns package names for all selected (uninstalled) packages
+// from both static and PHP groups.
 func (s *SetupScreen) selectedNames() []string {
 	var names []string
-	for i, pkg := range s.packages {
+
+	// Static packages
+	for i, pkg := range s.staticPkgs {
 		if s.selected[i] && !pkg.Installed {
-			// Use Name for static packages, or "php" + version suffix from DisplayName
-			name := pkg.Name
-			if pkg.Name == "php" && strings.HasPrefix(pkg.DisplayName, "PHP ") {
-				// "PHP 8.3" → "php8.3"
-				ver := strings.TrimPrefix(pkg.DisplayName, "PHP ")
-				name = "php" + ver
-			}
-			names = append(names, name)
+			names = append(names, pkg.Name)
 		}
 	}
+
+	// PHP packages
+	for i, pkg := range s.phpPkgs {
+		if s.phpSelected[i] && !pkg.Installed {
+			ver := strings.TrimPrefix(pkg.DisplayName, "PHP ")
+			names = append(names, "php"+ver)
+		}
+	}
+
 	return names
 }
 
