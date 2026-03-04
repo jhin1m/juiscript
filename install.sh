@@ -65,6 +65,21 @@ fi
 
 info "Latest version: $VERSION"
 
+# --- Check existing installation ---
+CURRENT_VERSION=""
+if command -v "$BINARY_NAME" &>/dev/null; then
+    CURRENT_VERSION=$("$BINARY_NAME" version 2>/dev/null | awk '{print $2}' || echo "")
+    if [ "$CURRENT_VERSION" = "$VERSION" ]; then
+        info "Already up to date ($VERSION)"
+        exit 0
+    fi
+    if [ -n "$CURRENT_VERSION" ]; then
+        info "Updating: $CURRENT_VERSION → $VERSION"
+    fi
+else
+    info "Fresh install: $VERSION"
+fi
+
 # --- Download binary ---
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-linux-${ARCH}"
 info "Downloading ${BINARY_NAME}-linux-${ARCH}..."
