@@ -232,6 +232,13 @@ func (s *SetupScreen) updatePHPSubmenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !s.phpPkgs[s.phpCursor].Installed {
 			s.phpSelected[s.phpCursor] = !s.phpSelected[s.phpCursor]
 		}
+	case "enter":
+		// Exit submenu and confirm selection if anything is selected
+		s.inPHPSub = false
+		names := s.selectedNames()
+		if len(names) > 0 {
+			s.state = stateConfirm
+		}
 	case "esc", "left", "h":
 		// Back to top-level
 		s.inPHPSub = false
@@ -368,7 +375,7 @@ func (s *SetupScreen) viewPHPSubmenu() string {
 		items += fmt.Sprintf("%s%s %s%s\n", cursor, check, name, status)
 	}
 
-	help := s.theme.HelpDesc.Render("\n  space: toggle  esc: back to setup")
+	help := s.theme.HelpDesc.Render("\n  space: toggle  enter: confirm  esc: back to setup")
 	return lipgloss.JoinVertical(lipgloss.Left, title, subtitle, "", items, help)
 }
 
