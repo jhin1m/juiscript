@@ -85,6 +85,7 @@ type App struct {
 	databaseScreen   *screens.DatabaseScreen
 	servicesScreen   *screens.ServicesScreen
 	queuesScreen     *screens.QueuesScreen
+	sslScreen        *screens.SSLScreen
 	backupScreen     *screens.BackupScreen
 	setupScreen      *screens.SetupScreen
 	setupProgressCh  chan provisioner.ProgressEvent // nil when not installing
@@ -118,6 +119,7 @@ func NewApp(cfg *config.Config, svcMgr *service.Manager, prov *provisioner.Provi
 		databaseScreen: screens.NewDatabaseScreen(t),
 		servicesScreen: screens.NewServicesScreen(t),
 		queuesScreen:   screens.NewQueuesScreen(t),
+		sslScreen:      screens.NewSSLScreen(t),
 		backupScreen:   screens.NewBackupScreen(t),
 		setupScreen:    screens.NewSetupScreen(t),
 	}
@@ -334,6 +336,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// TODO: Call database manager to export
 		return a, nil
 
+	// SSL screen messages
+	case screens.ObtainCertMsg:
+		// TODO: Call SSL manager to obtain cert (needs domain, webroot, email input)
+		return a, nil
+
+	case screens.RevokeCertMsg:
+		// TODO: Call SSL manager to revoke cert for msg.Domain
+		return a, nil
+
+	case screens.RenewCertMsg:
+		// TODO: Call SSL manager to renew cert for msg.Domain
+		return a, nil
+
 	// Service screen messages — re-fetch status after each action
 	case screens.StartServiceMsg:
 		// TODO: Call service manager to start
@@ -426,6 +441,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.databaseScreen.Update(msg)
 		a.databaseScreen = updated.(*screens.DatabaseScreen)
 		return cmd
+	case ScreenSSL:
+		updated, cmd := a.sslScreen.Update(msg)
+		a.sslScreen = updated.(*screens.SSLScreen)
+		return cmd
 	case ScreenServices:
 		updated, cmd := a.servicesScreen.Update(msg)
 		a.servicesScreen = updated.(*screens.ServicesScreen)
@@ -466,6 +485,8 @@ func (a *App) View() string {
 		content = a.phpScreen.View()
 	case ScreenDatabase:
 		content = a.databaseScreen.View()
+	case ScreenSSL:
+		content = a.sslScreen.View()
 	case ScreenServices:
 		content = a.servicesScreen.View()
 	case ScreenQueues:
