@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/config"
 	"github.com/jhin1m/juiscript/internal/provisioner"
 	"github.com/jhin1m/juiscript/internal/service"
 	"github.com/jhin1m/juiscript/internal/tui/components"
@@ -70,6 +71,7 @@ type App struct {
 	header     *components.Header
 	statusBar  *components.StatusBar
 	serviceBar *components.ServiceStatusBar
+	cfg        *config.Config
 	svcMgr     *service.Manager
 	prov       *provisioner.Provisioner
 	current     Screen
@@ -91,15 +93,19 @@ type App struct {
 }
 
 // NewApp creates the root TUI application.
-// svcMgr and prov can be nil — graceful degradation.
-func NewApp(svcMgr *service.Manager, prov *provisioner.Provisioner) *App {
+// cfg, svcMgr and prov can be nil — graceful degradation.
+func NewApp(cfg *config.Config, svcMgr *service.Manager, prov *provisioner.Provisioner) *App {
 	t := theme.New()
+	if cfg == nil {
+		cfg = config.Default()
+	}
 
 	return &App{
 		theme:      t,
 		header:     components.NewHeader(t),
 		statusBar:  components.NewStatusBar(t),
 		serviceBar: components.NewServiceStatusBar(t),
+		cfg:        cfg,
 		svcMgr:     svcMgr,
 		prov:       prov,
 		current:     ScreenDashboard,
@@ -118,6 +124,8 @@ func NewApp(svcMgr *service.Manager, prov *provisioner.Provisioner) *App {
 }
 
 func (a *App) Init() tea.Cmd {
+	// Pass default PHP version from config to PHP screen
+	a.phpScreen.SetDefaultVersion(a.cfg.PHP.DefaultVersion)
 	return tea.Batch(a.dashboard.Init(), a.fetchServiceStatus(), a.detectPackages())
 }
 
@@ -182,19 +190,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case DetectPackagesMsg:
-		// Count missing: group all PHP versions as 1 item
+		// Count missing: static packages individually, PHP only if zero versions installed
 		missing := 0
-		phpMissing := false
+		phpHasAny := false
 		for _, pkg := range msg.Packages {
-			if !pkg.Installed {
-				if pkg.Name == "php" {
-					phpMissing = true
-				} else {
-					missing++
+			if pkg.Name == "php" {
+				if pkg.Installed {
+					phpHasAny = true
 				}
+			} else if !pkg.Installed {
+				missing++
 			}
 		}
-		if phpMissing {
+		if !phpHasAny {
 			missing++
 		}
 		a.dashboard.SetMissingCount(missing)
@@ -298,6 +306,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.RemovePHPMsg:
 		// TODO: Call PHP manager to remove version
+		return a, nil
+
+	case screens.SetDefaultPHPMsg:
+		// Update config and save, then refresh PHP screen
+		a.cfg.PHP.DefaultVersion = msg.Version
+		a.phpScreen.SetDefaultVersion(msg.Version)
+		go func() {
+			_ = a.cfg.Save(config.ConfigPath())
+		}()
 		return a, nil
 
 	// Database screen messages
@@ -518,6 +535,7 @@ func (a *App) currentBindings() []components.KeyBinding {
 	case ScreenPHP:
 		return append([]components.KeyBinding{
 			{Key: "j/k", Desc: "navigate"},
+			{Key: "d", Desc: "set default"},
 			{Key: "i", Desc: "install"},
 			{Key: "r", Desc: "remove"},
 			{Key: "esc", Desc: "back"},

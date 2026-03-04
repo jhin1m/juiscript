@@ -7,6 +7,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/config"
 	"github.com/jhin1m/juiscript/internal/php"
 	"github.com/jhin1m/juiscript/internal/provisioner"
 	"github.com/jhin1m/juiscript/internal/service"
@@ -57,13 +58,20 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
+	// Load config — falls back to sensible defaults if file doesn't exist
+	cfg, err := config.Load(config.ConfigPath())
+	if err != nil {
+		logger.Warn("failed to load config, using defaults", "error", err)
+		cfg = config.Default()
+	}
+
 	exec := system.NewExecutor(logger)
 	fileMgr := system.NewFileManager()
 	tplEngine, _ := template.New() // template engine for PHP-FPM pool configs
 	phpMgr := php.NewManager(exec, fileMgr, tplEngine)
 	svcMgr := service.NewManager(exec)
 	prov := provisioner.NewProvisioner(exec, phpMgr)
-	app := tui.NewApp(svcMgr, prov)
+	app := tui.NewApp(cfg, svcMgr, prov)
 
 	// tea.WithAltScreen uses the alternate terminal buffer
 	// so the TUI doesn't mess up your terminal history

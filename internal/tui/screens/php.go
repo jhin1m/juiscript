@@ -11,12 +11,13 @@ import (
 
 // PHPScreen displays installed PHP versions and their FPM status.
 type PHPScreen struct {
-	theme    *theme.Theme
-	versions []php.VersionInfo
-	cursor   int
-	width    int
-	height   int
-	err      error
+	theme          *theme.Theme
+	versions       []php.VersionInfo
+	defaultVersion string // currently configured default PHP version
+	cursor         int
+	width          int
+	height         int
+	err            error
 }
 
 // NewPHPScreen creates the PHP management screen.
@@ -28,6 +29,11 @@ func NewPHPScreen(t *theme.Theme) *PHPScreen {
 func (p *PHPScreen) SetVersions(versions []php.VersionInfo) {
 	p.versions = versions
 	p.err = nil
+}
+
+// SetDefaultVersion updates the displayed default PHP version.
+func (p *PHPScreen) SetDefaultVersion(ver string) {
+	p.defaultVersion = ver
 }
 
 // SetError sets an error to display.
@@ -52,6 +58,14 @@ func (p *PHPScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			if p.cursor < len(p.versions)-1 {
 				p.cursor++
+			}
+		case "d":
+			// Set selected version as default (only if versions exist)
+			if len(p.versions) > 0 {
+				ver := p.versions[p.cursor].Version
+				return p, func() tea.Msg {
+					return SetDefaultPHPMsg{Version: ver}
+				}
 			}
 		case "i":
 			return p, func() tea.Msg {
@@ -86,7 +100,7 @@ func (p *PHPScreen) View() string {
 	}
 
 	// Table header
-	header := fmt.Sprintf("  %-12s %-12s %s", "VERSION", "FPM STATUS", "BOOT")
+	header := fmt.Sprintf("  %-12s %-12s %-10s %s", "VERSION", "FPM STATUS", "BOOT", "")
 	headerStyle := p.theme.HelpKey.Render(header)
 
 	// Table rows
@@ -115,16 +129,23 @@ func (p *PHPScreen) View() string {
 			bootStyle = p.theme.OkText
 		}
 
-		row := fmt.Sprintf("%s%-12s %s  %s",
+		// Default version indicator
+		defaultTag := ""
+		if v.Version == p.defaultVersion {
+			defaultTag = p.theme.OkText.Render(" ★ default")
+		}
+
+		row := fmt.Sprintf("%s%-12s %s  %s%s",
 			cursor,
 			style.Render("PHP "+v.Version),
 			statusStyle.Render(fmt.Sprintf("%-12s", status)),
 			bootStyle.Render(boot),
+			defaultTag,
 		)
 		rows += row + "\n"
 	}
 
-	help := p.theme.HelpDesc.Render("  i:install  r:remove  esc:back")
+	help := p.theme.HelpDesc.Render("  d:set default  i:install  r:remove  esc:back")
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		title, "", headerStyle, rows, help)
@@ -136,5 +157,10 @@ func (p *PHPScreen) ScreenTitle() string { return "PHP" }
 type InstallPHPMsg struct{}
 
 type RemovePHPMsg struct {
+	Version string
+}
+
+// SetDefaultPHPMsg tells app to update the default PHP version in config.
+type SetDefaultPHPMsg struct {
 	Version string
 }
