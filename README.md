@@ -13,18 +13,35 @@ Go CLI tool for LEMP server management with a beautiful TUI. Manage Nginx, PHP-F
 - **Queue Workers** - Supervisor-managed Laravel queue workers
 - **Service Control** - Start/stop/restart Nginx, PHP-FPM, MariaDB, Redis
 
-## Quick Start
+## Install
+
+One-line install on your Ubuntu server:
 
 ```bash
-# Build
-make build
+curl -sSL https://raw.githubusercontent.com/jhin1m/juiscript/main/install.sh | sudo bash
+```
 
-# Build for Ubuntu server
-make build-linux
+Then run:
 
-# Copy to server and run
-scp bin/juiscript-linux-amd64 user@server:/usr/local/bin/juiscript
-ssh user@server 'sudo juiscript'
+```bash
+sudo juiscript
+```
+
+### Manual Install
+
+Download the binary from [Releases](https://github.com/jhin1m/juiscript/releases), then:
+
+```bash
+sudo install -m 755 juiscript-linux-amd64 /usr/local/bin/juiscript
+sudo juiscript
+```
+
+## Build from Source
+
+```bash
+make build              # Current platform
+make build-linux        # Linux AMD64
+make build-linux-arm64  # Linux ARM64
 ```
 
 ## Requirements

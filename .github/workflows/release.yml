@@ -1,0 +1,38 @@
+# Build and release binaries when a version tag is pushed.
+# Usage: git tag v1.0.0 && git push origin v1.0.0
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*" # Trigger on tags like v1.0.0, v0.1.0-beta, etc.
+
+permissions:
+  contents: write # Needed to create releases and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for git describe
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod # Use Go version from go.mod
+
+      # Build binaries for both architectures
+      - name: Build linux/amd64
+        run: make build-linux
+      - name: Build linux/arm64
+        run: make build-linux-arm64
+
+      # Create GitHub Release with binaries attached
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true # Auto-generate changelog from commits
+          files: |
+            bin/juiscript-linux-amd64
+            bin/juiscript-linux-arm64
