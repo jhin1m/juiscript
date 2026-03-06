@@ -299,10 +299,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.previous = a.current
 			a.current = screen
 		}
-		// Fetch PHP versions when navigating to PHP screen
+		// Fetch screen-specific data on navigation
 		cmds := []tea.Cmd{a.fetchServiceStatus()}
-		if a.current == ScreenPHP {
+		switch a.current {
+		case ScreenSites:
+			cmds = append(cmds, a.fetchSites())
+		case ScreenNginx:
+			cmds = append(cmds, a.fetchVhosts())
+		case ScreenPHP:
 			cmds = append(cmds, a.fetchPHPVersions())
+		case ScreenDatabase:
+			cmds = append(cmds, a.fetchDatabases())
+		case ScreenSSL:
+			cmds = append(cmds, a.fetchCerts())
+		case ScreenQueues:
+			cmds = append(cmds, a.fetchWorkers())
+		case ScreenBackup:
+			cmds = append(cmds, a.fetchBackups(""))
 		}
 		return a, tea.Batch(cmds...)
 
@@ -348,44 +361,36 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.ShowSiteDetailMsg:
 		a.previous = a.current
 		a.current = ScreenSiteDetail
-		// TODO: Load site detail from manager
-		return a, nil
+		return a, a.fetchSiteDetail(msg.Domain)
 
 	case screens.CreateSiteMsg:
-		// TODO: Call site manager to create site
-		// For now, go back to site list
-		a.current = ScreenSites
-		return a, nil
+		return a, a.handleCreateSite(msg.Options)
 
 	case screens.ToggleSiteMsg:
-		// TODO: Call site manager to toggle
-		return a, nil
+		return a, a.handleToggleSite(msg.Domain)
 
 	case screens.DeleteSiteMsg:
-		// TODO: Call site manager to delete
-		return a, nil
+		return a, a.handleDeleteSite(msg.Domain)
 
 	// Nginx screen messages
 	case screens.ToggleVhostMsg:
-		// TODO: Call nginx manager to toggle
-		return a, nil
+		return a, a.handleToggleVhost(msg.Domain, msg.CurrentlyEnabled)
 
 	case screens.DeleteVhostMsg:
-		// TODO: Call nginx manager to delete
-		return a, nil
+		return a, a.handleDeleteVhost(msg.Domain)
 
 	case screens.TestNginxMsg:
-		// TODO: Call nginx manager to test config
-		return a, nil
+		return a, a.handleTestNginx()
 
 	// PHP screen messages
 	case screens.InstallPHPMsg:
-		// TODO: Call PHP manager to install version
-		return a, nil
+		// InstallPHPMsg has no version field -- needs version picker form (not yet implemented)
+		return a, func() tea.Msg {
+			return PHPVersionsErrMsg{Err: fmt.Errorf("PHP install requires a version selector (not yet implemented)")}
+		}
 
 	case screens.RemovePHPMsg:
-		// TODO: Call PHP manager to remove version
-		return a, nil
+		return a, a.handleRemovePHP(msg.Version)
 
 	case screens.SetDefaultPHPMsg:
 		// Update config and save, then refresh PHP screen
@@ -398,79 +403,154 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Database screen messages
 	case screens.CreateDBMsg:
-		// TODO: Call database manager to create DB
-		return a, nil
+		return a, a.handleCreateDB()
 
 	case screens.DropDBMsg:
-		// TODO: Call database manager to drop DB
-		return a, nil
+		return a, a.handleDropDB(msg.Name)
 
 	case screens.ImportDBMsg:
-		// TODO: Call database manager to import
-		return a, nil
+		return a, a.handleImportDB(msg.Name)
 
 	case screens.ExportDBMsg:
-		// TODO: Call database manager to export
-		return a, nil
+		return a, a.handleExportDB(msg.Name)
 
 	// SSL screen messages
 	case screens.ObtainCertMsg:
-		// TODO: Call SSL manager to obtain cert (needs domain, webroot, email input)
-		return a, nil
+		return a, a.handleObtainCert()
 
 	case screens.RevokeCertMsg:
-		// TODO: Call SSL manager to revoke cert for msg.Domain
-		return a, nil
+		return a, a.handleRevokeCert(msg.Domain)
 
 	case screens.RenewCertMsg:
-		// TODO: Call SSL manager to renew cert for msg.Domain
-		return a, nil
+		return a, a.handleRenewCert(msg.Domain)
 
-	// Service screen messages — re-fetch status after each action
+	// Service screen messages
 	case screens.StartServiceMsg:
-		// TODO: Call service manager to start
-		return a, a.fetchServiceStatus()
+		return a, a.handleServiceAction(msg.Name, "start")
 
 	case screens.StopServiceMsg:
-		// TODO: Call service manager to stop
-		return a, a.fetchServiceStatus()
+		return a, a.handleServiceAction(msg.Name, "stop")
 
 	case screens.RestartServiceMsg:
-		// TODO: Call service manager to restart
-		return a, a.fetchServiceStatus()
+		return a, a.handleServiceAction(msg.Name, "restart")
 
 	case screens.ReloadServiceMsg:
-		// TODO: Call service manager to reload
-		return a, a.fetchServiceStatus()
+		return a, a.handleServiceAction(msg.Name, "reload")
 
 	// Queue worker screen messages
 	case screens.StartWorkerMsg:
-		// TODO: Call supervisor manager to start worker
-		return a, nil
+		return a, a.handleWorkerAction(msg.Name, "start")
 
 	case screens.StopWorkerMsg:
-		// TODO: Call supervisor manager to stop worker
-		return a, nil
+		return a, a.handleWorkerAction(msg.Name, "stop")
 
 	case screens.RestartWorkerMsg:
-		// TODO: Call supervisor manager to restart worker
-		return a, nil
+		return a, a.handleWorkerAction(msg.Name, "restart")
 
 	case screens.DeleteWorkerMsg:
-		// TODO: Call supervisor manager to delete worker
-		return a, nil
+		return a, a.handleDeleteWorker(msg.Name)
 
 	// Backup screen messages
 	case screens.CreateBackupMsg:
-		// TODO: Call backup manager to create backup
-		return a, nil
+		return a, a.handleCreateBackup()
 
 	case screens.RestoreBackupMsg:
-		// TODO: Call backup manager to restore
-		return a, nil
+		return a, a.handleRestoreBackup(msg.Path)
 
 	case screens.DeleteBackupMsg:
-		// TODO: Call backup manager to delete
+		return a, a.handleDeleteBackup(msg.Path)
+
+	// --- Result messages from async operations ---
+
+	// Site results
+	case SiteListMsg:
+		a.siteList.SetSites(msg.Sites)
+		return a, nil
+	case SiteListErrMsg:
+		a.siteList.SetError(msg.Err)
+		return a, nil
+	case SiteDetailMsg:
+		a.siteDetail.SetSite(msg.Site)
+		return a, nil
+	case SiteCreatedMsg:
+		a.current = ScreenSites
+		return a, a.fetchSites()
+	case SiteOpDoneMsg:
+		return a, a.fetchSites()
+	case SiteOpErrMsg:
+		a.siteList.SetError(msg.Err)
+		return a, nil
+
+	// Nginx results
+	case VhostListMsg:
+		a.nginxScreen.SetVhosts(msg.Vhosts)
+		return a, nil
+	case VhostListErrMsg:
+		a.nginxScreen.SetError(msg.Err)
+		return a, nil
+	case NginxOpDoneMsg:
+		return a, a.fetchVhosts()
+	case NginxOpErrMsg:
+		a.nginxScreen.SetError(msg.Err)
+		return a, nil
+	case NginxTestOkMsg:
+		return a, a.fetchVhosts()
+
+	// Database results
+	case DBListMsg:
+		a.databaseScreen.SetDatabases(msg.Databases)
+		return a, nil
+	case DBListErrMsg:
+		a.databaseScreen.SetError(msg.Err)
+		return a, nil
+	case DBOpDoneMsg:
+		return a, a.fetchDatabases()
+	case DBOpErrMsg:
+		a.databaseScreen.SetError(msg.Err)
+		return a, nil
+
+	// SSL results
+	case CertListMsg:
+		a.sslScreen.SetCerts(msg.Certs)
+		return a, nil
+	case CertListErrMsg:
+		a.sslScreen.SetError(msg.Err)
+		return a, nil
+	case SSLOpDoneMsg:
+		return a, a.fetchCerts()
+	case SSLOpErrMsg:
+		a.sslScreen.SetError(msg.Err)
+		return a, nil
+
+	// Service results (ServiceStatusMsg already handled above)
+	case ServiceOpErrMsg:
+		a.servicesScreen.SetError(msg.Err)
+		return a, nil
+
+	// Queue results
+	case WorkerListMsg:
+		a.queuesScreen.SetWorkers(msg.Workers)
+		return a, nil
+	case WorkerListErrMsg:
+		a.queuesScreen.SetError(msg.Err)
+		return a, nil
+	case QueueOpDoneMsg:
+		return a, a.fetchWorkers()
+	case QueueOpErrMsg:
+		a.queuesScreen.SetError(msg.Err)
+		return a, nil
+
+	// Backup results
+	case BackupListMsg:
+		a.backupScreen.SetBackups(msg.Backups)
+		return a, nil
+	case BackupListErrMsg:
+		a.backupScreen.SetError(msg.Err)
+		return a, nil
+	case BackupOpDoneMsg:
+		return a, a.fetchBackups("")
+	case BackupOpErrMsg:
+		a.backupScreen.SetError(msg.Err)
 		return a, nil
 	}
 

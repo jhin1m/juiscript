@@ -50,7 +50,8 @@ juiscript/
 │   │   ├── installer.go        # Package installation (Phase 02, 196 lines)
 │   │   └── installer_test.go   # 12 unit tests
 │   └── tui/
-│       ├── app.go              # Root model & screen router
+│       ├── app.go              # Root model & screen router (Phase 1: AppDeps injection)
+│       ├── app_messages.go     # Result message types for async operations (Phase 1)
 │       ├── components/
 │       │   ├── header.go       # Header component
 │       │   ├── statusbar.go    # Status bar component
@@ -76,11 +77,16 @@ juiscript/
 
 ## Key Files & Responsibilities
 
-### cmd/juiscript/main.go (57 lines)
-**Purpose**: CLI entry point
+### cmd/juiscript/main.go (123 lines)
+**Purpose**: CLI entry point with Phase 1 backend wiring
 - Cobra root command with TUI as default action
 - Version command for build info
-- Launches Bubble Tea program
+- **Phase 1**: Constructs all 9 backend managers in runTUI():
+  - System abstractions: Executor, FileManager, UserManager
+  - Core managers: PHPManager, ServiceManager, Provisioner
+  - Domain managers: NginxManager, DatabaseManager, SiteManager, SSLManager, SupervisorManager, BackupManager
+- Passes (cfg, AppDeps) to tui.NewApp for dependency injection
+- Log file: /var/log/juiscript.log (fallback to discard if no permission)
 - Build-time ldflags: version, commit
 
 ### internal/config/config.go (157 lines)
@@ -134,14 +140,40 @@ Config
 - Available: List all loaded template names
 - Used for Nginx vhost, PHP-FPM, Supervisor configs
 
-### internal/tui/app.go (171 lines)
-**Purpose**: Root Bubble Tea model & screen router
-- App struct: Theme, Header, StatusBar, current screen, dimensions
-- NewApp: Initializes with Dashboard screen
-- Update: Handles keyboard input, window resize, navigation messages
-- View: Renders header + content + status bar
+### internal/tui/app.go (689 lines) - Phase 1: Backend Wiring
+**Purpose**: Root Bubble Tea model & screen router with injected backend managers
+- **Phase 1**: Added AppDeps struct for dependency injection of 9 backend managers
+- **Phase 1**: Constructor now takes (cfg *config.Config, deps AppDeps)
+- App struct (14 manager fields + UI fields):
+  - Backend: svcMgr, prov, phpMgr, siteMgr, nginxMgr, dbMgr, sslMgr, supervisorMgr, backupMgr
+  - UI: Theme, Header, StatusBar, ServiceStatusBar, 11 screens
+- All manager fields are nil-safe (optional for graceful degradation)
+- NewApp: Initializes with all screens
+- Update: Handles keyboard input, window resize, navigation messages, async result messages
+- **Phase 1**: Result message handlers for async backend operations:
+  - Service: ServiceStatusMsg, ServiceStatusErrMsg
+  - PHP: PHPVersionsMsg, PHPVersionsErrMsg
+  - Provisioner: DetectPackagesMsg, DetectPackagesErrMsg
+- **Phase 1**: Async patterns (examples):
+  - fetchServiceStatus(): Returns tea.Cmd that calls svcMgr.ListAll async
+  - fetchPHPVersions(): Returns tea.Cmd that calls phpMgr.ListVersions async
+  - detectPackages(): Returns tea.Cmd that calls prov.DetectAll async
+- View: Renders header + service status bar + content + status bar
 - Navigation: 'j'/'k' to move, 'enter' to select, 'q' to quit
 - Custom messages: NavigateMsg (screen change), GoBackMsg (return to dashboard)
+
+### internal/tui/app_messages.go (113 lines) - Phase 1: Result Messages
+**Purpose**: Define 28 result/error message types for async backend operations
+- **Site operations** (6 types): SiteListMsg, SiteListErrMsg, SiteCreatedMsg, SiteDetailMsg, SiteOpDoneMsg, SiteOpErrMsg
+- **Nginx operations** (5 types): VhostListMsg, VhostListErrMsg, NginxOpDoneMsg, NginxOpErrMsg, NginxTestOkMsg
+- **Database operations** (4 types): DBListMsg, DBListErrMsg, DBOpDoneMsg, DBOpErrMsg
+- **SSL operations** (4 types): CertListMsg, CertListErrMsg, SSLOpDoneMsg, SSLOpErrMsg
+- **Service operations** (2 types): ServiceOpDoneMsg, ServiceOpErrMsg (StatusMsg in app.go)
+- **Queue operations** (4 types): WorkerListMsg, WorkerListErrMsg, QueueOpDoneMsg, QueueOpErrMsg
+- **Backup operations** (4 types): BackupListMsg, BackupListErrMsg, BackupOpDoneMsg, BackupOpErrMsg
+- Pattern: Each backend operation has success (msg) and failure (errMsg) variants
+- Enables async operation pattern: Emit async cmd → Receive result msg → Update state
+- Imported types: site.Site, nginx.VhostInfo, database.DBInfo, ssl.CertInfo, supervisor.WorkerStatus, backup.BackupInfo
 
 ### internal/tui/components/header.go (27 lines)
 **Purpose**: App header component
