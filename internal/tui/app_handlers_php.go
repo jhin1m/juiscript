@@ -25,13 +25,24 @@ func (a *App) handleInstallPHP(version string) tea.Cmd {
 }
 
 // handleRemovePHP removes a PHP version and re-fetches the version list on success.
-// Passes nil for sites list -- TUI doesn't track site-version mapping yet.
+// Fetches active sites first so RemoveVersion can warn if the version is in use.
 func (a *App) handleRemovePHP(version string) tea.Cmd {
 	if a.phpMgr == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		if err := a.phpMgr.RemoveVersion(context.Background(), version, nil); err != nil {
+		// Collect domains of sites using this PHP version
+		var activeSites []string
+		if a.siteMgr != nil {
+			if sites, err := a.siteMgr.List(); err == nil {
+				for _, s := range sites {
+					if s.PHPVersion == version {
+						activeSites = append(activeSites, s.Domain)
+					}
+				}
+			}
+		}
+		if err := a.phpMgr.RemoveVersion(context.Background(), version, activeSites); err != nil {
 			return PHPVersionsErrMsg{Err: err}
 		}
 		versions, err := a.phpMgr.ListVersions(context.Background())
