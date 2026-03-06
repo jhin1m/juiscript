@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -20,13 +21,19 @@ func (a *App) fetchCerts() tea.Cmd {
 	}
 }
 
-// handleObtainCert is a placeholder -- needs domain + email input form.
-func (a *App) handleObtainCert() tea.Cmd {
+// handleObtainCert obtains an SSL certificate for a domain.
+func (a *App) handleObtainCert(domain, email string) tea.Cmd {
 	if a.sslMgr == nil {
 		return nil
 	}
+	// Derive webRoot from config: sitesRoot/site_user/public
+	webRoot := fmt.Sprintf("%s/site_%s/public", a.cfg.General.SitesRoot,
+		strings.ReplaceAll(domain, ".", "_"))
 	return func() tea.Msg {
-		return SSLOpErrMsg{Err: fmt.Errorf("SSL obtain requires domain and email input (not yet implemented)")}
+		if err := a.sslMgr.Obtain(domain, webRoot, email); err != nil {
+			return SSLOpErrMsg{Err: err}
+		}
+		return SSLOpDoneMsg{}
 	}
 }
 

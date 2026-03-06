@@ -2,12 +2,22 @@ package screens
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jhin1m/juiscript/internal/site"
 	"github.com/jhin1m/juiscript/internal/ssl"
+	"github.com/jhin1m/juiscript/internal/tui/components"
 	"github.com/jhin1m/juiscript/internal/tui/theme"
 )
+
+func validateEmail(email string) error {
+	if email == "" || !strings.Contains(email, "@") {
+		return fmt.Errorf("valid email required (e.g., admin@example.com)")
+	}
+	return nil
+}
 
 // SSLScreen displays SSL certificates and provides management actions.
 type SSLScreen struct {
@@ -17,27 +27,90 @@ type SSLScreen struct {
 	width  int
 	height int
 	err    error
+	// Form for obtain cert
+	form       *components.FormModel
+	formActive bool
+	// Confirm for revoke
+	confirm       *components.ConfirmModel
+	pendingTarget string // domain to revoke
+	// Spinner for obtain
+	spinner *components.SpinnerModel
 }
 
-// NewSSLScreen creates the SSL management screen.
 func NewSSLScreen(t *theme.Theme) *SSLScreen {
-	return &SSLScreen{theme: t}
+	return &SSLScreen{
+		theme:   t,
+		confirm: components.NewConfirm(t),
+		spinner: components.NewSpinner(t),
+	}
 }
 
-// SetCerts updates the certificate list.
 func (s *SSLScreen) SetCerts(certs []ssl.CertInfo) {
 	s.certs = certs
 	s.err = nil
 }
 
-// SetError sets an error to display.
 func (s *SSLScreen) SetError(err error) {
 	s.err = err
+}
+
+// StopSpinner deactivates the spinner (called by App on result).
+func (s *SSLScreen) StopSpinner() {
+	s.spinner.Stop()
 }
 
 func (s *SSLScreen) Init() tea.Cmd { return nil }
 
 func (s *SSLScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Spinner ticks
+	if s.spinner.Active() {
+		_, cmd := s.spinner.Update(msg)
+		return s, cmd
+	}
+
+	// Confirm dialog
+	if s.confirm.Active() {
+		_, cmd := s.confirm.Update(msg)
+		if cmd != nil {
+			domain := s.pendingTarget
+			s.pendingTarget = ""
+			return s, func() tea.Msg {
+				result := cmd()
+				switch result.(type) {
+				case components.ConfirmYesMsg:
+					return RevokeCertMsg{Domain: domain}
+				case components.ConfirmNoMsg:
+					return nil
+				default:
+					return result
+				}
+			}
+		}
+		return s, nil
+	}
+
+	// Form
+	if s.formActive {
+		_, cmd := s.form.Update(msg)
+		if cmd != nil {
+			result := cmd()
+			switch v := result.(type) {
+			case components.FormSubmitMsg:
+				s.formActive = false
+				domain := v.Values["domain"]
+				email := v.Values["email"]
+				spinCmd := s.spinner.Start("Obtaining certificate for " + domain + "...")
+				return s, tea.Batch(spinCmd, func() tea.Msg {
+					return ObtainCertMsg{Domain: domain, Email: email}
+				})
+			case components.FormCancelMsg:
+				s.formActive = false
+				return s, nil
+			}
+		}
+		return s, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		s.width = msg.Width
@@ -54,12 +127,20 @@ func (s *SSLScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				s.cursor++
 			}
 		case "o":
-			return s, func() tea.Msg { return ObtainCertMsg{} }
+			// Obtain cert form
+			fields := []components.FormField{
+				{Key: "domain", Label: "Domain", Type: components.FieldText,
+					Placeholder: "example.com", Validate: site.ValidateDomain},
+				{Key: "email", Label: "Email", Type: components.FieldText,
+					Placeholder: "admin@example.com", Validate: validateEmail},
+			}
+			s.form = components.NewForm(s.theme, "Obtain SSL Certificate", fields)
+			s.formActive = true
 		case "r":
 			if len(s.certs) > 0 {
-				return s, func() tea.Msg {
-					return RevokeCertMsg{Domain: s.certs[s.cursor].Domain}
-				}
+				domain := s.certs[s.cursor].Domain
+				s.pendingTarget = domain
+				s.confirm.Show(fmt.Sprintf("Revoke certificate for '%s'?", domain))
 			}
 		case "f":
 			if len(s.certs) > 0 {
@@ -78,6 +159,18 @@ func (s *SSLScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (s *SSLScreen) View() string {
 	title := s.theme.Title.Render("SSL Certificates")
 
+	if s.spinner.Active() {
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", s.spinner.View())
+	}
+
+	if s.confirm.Active() {
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", s.confirm.View())
+	}
+
+	if s.formActive && s.form != nil {
+		return s.form.View()
+	}
+
 	if s.err != nil {
 		errMsg := s.theme.ErrorText.Render(fmt.Sprintf("Error: %v", s.err))
 		return lipgloss.JoinVertical(lipgloss.Left, title, "", errMsg)
@@ -89,11 +182,9 @@ func (s *SSLScreen) View() string {
 		return lipgloss.JoinVertical(lipgloss.Left, title, "", empty, "", help)
 	}
 
-	// Table header
 	header := fmt.Sprintf("  %-35s %-12s %-10s %s", "DOMAIN", "DAYS LEFT", "STATUS", "ISSUER")
 	headerStyle := s.theme.HelpKey.Render(header)
 
-	// Table rows
 	var rows string
 	for idx, cert := range s.certs {
 		cursor := "  "
@@ -103,7 +194,6 @@ func (s *SSLScreen) View() string {
 			style = s.theme.Active
 		}
 
-		// Color-code status based on days left
 		status := statusLabel(cert)
 		statusStyle := s.statusStyle(cert)
 
@@ -123,10 +213,8 @@ func (s *SSLScreen) View() string {
 		title, "", headerStyle, rows, help)
 }
 
-// ScreenTitle returns the title for the header component.
 func (s *SSLScreen) ScreenTitle() string { return "SSL" }
 
-// statusLabel returns a human-readable status string.
 func statusLabel(cert ssl.CertInfo) string {
 	switch {
 	case !cert.Valid:
@@ -140,7 +228,6 @@ func statusLabel(cert ssl.CertInfo) string {
 	}
 }
 
-// statusStyle returns the appropriate color for the cert status.
 func (s *SSLScreen) statusStyle(cert ssl.CertInfo) lipgloss.Style {
 	switch {
 	case !cert.Valid || cert.DaysLeft <= 7:
@@ -153,7 +240,10 @@ func (s *SSLScreen) statusStyle(cert ssl.CertInfo) lipgloss.Style {
 }
 
 // Messages for SSL screen actions.
-type ObtainCertMsg struct{}
+type ObtainCertMsg struct {
+	Domain string
+	Email  string
+}
 
 type RevokeCertMsg struct {
 	Domain string

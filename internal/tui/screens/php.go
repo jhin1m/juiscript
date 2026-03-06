@@ -6,44 +6,110 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jhin1m/juiscript/internal/php"
+	"github.com/jhin1m/juiscript/internal/tui/components"
 	"github.com/jhin1m/juiscript/internal/tui/theme"
 )
+
+// Available PHP versions for installation.
+var availablePHPVersions = []string{"8.4", "8.3", "8.2", "8.1", "8.0", "7.4"}
 
 // PHPScreen displays installed PHP versions and their FPM status.
 type PHPScreen struct {
 	theme          *theme.Theme
 	versions       []php.VersionInfo
-	defaultVersion string // currently configured default PHP version
+	defaultVersion string
 	cursor         int
 	width          int
 	height         int
 	err            error
+	// Form for version picker
+	form       *components.FormModel
+	formActive bool
+	// Confirm for destructive remove action
+	confirm       *components.ConfirmModel
+	pendingTarget string // version to remove
+	// Spinner for install/remove
+	spinner *components.SpinnerModel
 }
 
-// NewPHPScreen creates the PHP management screen.
 func NewPHPScreen(t *theme.Theme) *PHPScreen {
-	return &PHPScreen{theme: t}
+	return &PHPScreen{
+		theme:   t,
+		confirm: components.NewConfirm(t),
+		spinner: components.NewSpinner(t),
+	}
 }
 
-// SetVersions updates the PHP version list.
 func (p *PHPScreen) SetVersions(versions []php.VersionInfo) {
 	p.versions = versions
 	p.err = nil
 }
 
-// SetDefaultVersion updates the displayed default PHP version.
 func (p *PHPScreen) SetDefaultVersion(ver string) {
 	p.defaultVersion = ver
 }
 
-// SetError sets an error to display.
 func (p *PHPScreen) SetError(err error) {
 	p.err = err
+}
+
+// StopSpinner deactivates the spinner (called by App on result).
+func (p *PHPScreen) StopSpinner() {
+	p.spinner.Stop()
 }
 
 func (p *PHPScreen) Init() tea.Cmd { return nil }
 
 func (p *PHPScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Forward spinner ticks when active
+	if p.spinner.Active() {
+		_, cmd := p.spinner.Update(msg)
+		return p, cmd
+	}
+
+	// Confirm dialog takes priority
+	if p.confirm.Active() {
+		_, cmd := p.confirm.Update(msg)
+		if cmd != nil {
+			ver := p.pendingTarget
+			p.pendingTarget = ""
+			return p, func() tea.Msg {
+				result := cmd()
+				switch result.(type) {
+				case components.ConfirmYesMsg:
+					return RemovePHPMsg{Version: ver}
+				case components.ConfirmNoMsg:
+					return nil
+				default:
+					return result
+				}
+			}
+		}
+		return p, nil
+	}
+
+	// Form takes priority when active
+	if p.formActive {
+		_, cmd := p.form.Update(msg)
+		if cmd != nil {
+			// Eagerly evaluate to handle form results synchronously
+			result := cmd()
+			switch v := result.(type) {
+			case components.FormSubmitMsg:
+				p.formActive = false
+				version := v.Values["version"]
+				spinCmd := p.spinner.Start("Installing PHP " + version + "...")
+				return p, tea.Batch(spinCmd, func() tea.Msg {
+					return InstallPHPMsg{Version: version}
+				})
+			case components.FormCancelMsg:
+				p.formActive = false
+				return p, nil
+			}
+		}
+		return p, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		p.width = msg.Width
@@ -60,7 +126,6 @@ func (p *PHPScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				p.cursor++
 			}
 		case "d":
-			// Set selected version as default (only if versions exist)
 			if len(p.versions) > 0 {
 				ver := p.versions[p.cursor].Version
 				return p, func() tea.Msg {
@@ -68,14 +133,18 @@ func (p *PHPScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "i":
-			return p, func() tea.Msg {
-				return InstallPHPMsg{}
+			// Show version picker form
+			fields := []components.FormField{
+				{Key: "version", Label: "PHP Version", Type: components.FieldSelect,
+					Options: availablePHPVersions, Default: availablePHPVersions[0]},
 			}
+			p.form = components.NewForm(p.theme, "Install PHP Version", fields)
+			p.formActive = true
 		case "r":
 			if len(p.versions) > 0 {
-				return p, func() tea.Msg {
-					return RemovePHPMsg{Version: p.versions[p.cursor].Version}
-				}
+				ver := p.versions[p.cursor].Version
+				p.pendingTarget = ver
+				p.confirm.Show(fmt.Sprintf("Remove PHP %s? Sites using it will break.", ver))
 			}
 		case "esc", "q":
 			return p, func() tea.Msg { return GoBackMsg{} }
@@ -88,6 +157,21 @@ func (p *PHPScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (p *PHPScreen) View() string {
 	title := p.theme.Title.Render("PHP Versions")
 
+	// Spinner replaces content during operations
+	if p.spinner.Active() {
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", p.spinner.View())
+	}
+
+	// Confirm dialog replaces content
+	if p.confirm.Active() {
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", p.confirm.View())
+	}
+
+	// Form replaces content
+	if p.formActive && p.form != nil {
+		return p.form.View()
+	}
+
 	if p.err != nil {
 		errMsg := p.theme.ErrorText.Render(fmt.Sprintf("Error: %v", p.err))
 		return lipgloss.JoinVertical(lipgloss.Left, title, "", errMsg)
@@ -99,11 +183,9 @@ func (p *PHPScreen) View() string {
 		return lipgloss.JoinVertical(lipgloss.Left, title, "", empty, "", help)
 	}
 
-	// Table header
 	header := fmt.Sprintf("  %-12s %-12s %-10s %s", "VERSION", "FPM STATUS", "BOOT", "")
 	headerStyle := p.theme.HelpKey.Render(header)
 
-	// Table rows
 	var rows string
 	for i, v := range p.versions {
 		cursor := "  "
@@ -113,7 +195,6 @@ func (p *PHPScreen) View() string {
 			style = p.theme.Active
 		}
 
-		// FPM status display
 		status := "stopped"
 		statusStyle := p.theme.ErrorText
 		if v.Active {
@@ -121,7 +202,6 @@ func (p *PHPScreen) View() string {
 			statusStyle = p.theme.OkText
 		}
 
-		// Boot enabled display
 		boot := "disabled"
 		bootStyle := p.theme.ErrorText
 		if v.Enabled {
@@ -129,7 +209,6 @@ func (p *PHPScreen) View() string {
 			bootStyle = p.theme.OkText
 		}
 
-		// Default version indicator
 		defaultTag := ""
 		if v.Version == p.defaultVersion {
 			defaultTag = p.theme.OkText.Render(" ★ default")
@@ -154,13 +233,14 @@ func (p *PHPScreen) View() string {
 func (p *PHPScreen) ScreenTitle() string { return "PHP" }
 
 // Messages for PHP screen actions
-type InstallPHPMsg struct{}
+type InstallPHPMsg struct {
+	Version string
+}
 
 type RemovePHPMsg struct {
 	Version string
 }
 
-// SetDefaultPHPMsg tells app to update the default PHP version in config.
 type SetDefaultPHPMsg struct {
 	Version string
 }

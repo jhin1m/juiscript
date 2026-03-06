@@ -6,16 +6,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jhin1m/juiscript/internal/site"
+	"github.com/jhin1m/juiscript/internal/tui/components"
 	"github.com/jhin1m/juiscript/internal/tui/theme"
 )
 
 // SiteDetail shows detailed info about a single site with action menu.
 type SiteDetail struct {
-	theme  *theme.Theme
-	site   *site.Site
-	cursor int
-	width  int
-	height int
+	theme   *theme.Theme
+	site    *site.Site
+	cursor  int
+	width   int
+	height  int
+	confirm *components.ConfirmModel
 }
 
 type detailAction struct {
@@ -29,7 +31,10 @@ var detailActions = []detailAction{
 }
 
 func NewSiteDetail(t *theme.Theme) *SiteDetail {
-	return &SiteDetail{theme: t}
+	return &SiteDetail{
+		theme:   t,
+		confirm: components.NewConfirm(t),
+	}
 }
 
 func (d *SiteDetail) SetSite(s *site.Site) {
@@ -40,6 +45,26 @@ func (d *SiteDetail) SetSite(s *site.Site) {
 func (d *SiteDetail) Init() tea.Cmd { return nil }
 
 func (d *SiteDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Confirm dialog
+	if d.confirm.Active() {
+		_, cmd := d.confirm.Update(msg)
+		if cmd != nil {
+			return d, func() tea.Msg {
+				result := cmd()
+				switch result.(type) {
+				case components.ConfirmYesMsg:
+					if d.site != nil {
+						return DeleteSiteMsg{Domain: d.site.Domain}
+					}
+				case components.ConfirmNoMsg:
+					// cancelled
+				}
+				return nil
+			}
+		}
+		return d, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		d.width = msg.Width
@@ -63,9 +88,7 @@ func (d *SiteDetail) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "d":
 			if d.site != nil {
-				return d, func() tea.Msg {
-					return DeleteSiteMsg{Domain: d.site.Domain}
-				}
+				d.confirm.Show(fmt.Sprintf("Delete site '%s'? This will remove all files and configs.", d.site.Domain))
 			}
 		case "esc", "q":
 			return d, func() tea.Msg { return GoBackMsg{} }
@@ -83,13 +106,16 @@ func (d *SiteDetail) View() string {
 	s := d.site
 	title := d.theme.Title.Render(s.Domain)
 
-	// Status badge
+	// Confirm dialog replaces content
+	if d.confirm.Active() {
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", d.confirm.View())
+	}
+
 	status := d.theme.OkText.Render("ACTIVE")
 	if !s.Enabled {
 		status = d.theme.ErrorText.Render("DISABLED")
 	}
 
-	// Site info fields
 	info := fmt.Sprintf(
 		"  Status:       %s\n"+
 			"  Type:         %s\n"+
@@ -109,7 +135,6 @@ func (d *SiteDetail) View() string {
 		s.CreatedAt.Format("2006-01-02 15:04"),
 	)
 
-	// Actions
 	actions := "\n  Actions:\n"
 	for i, a := range detailActions {
 		cursor := "  "
@@ -133,7 +158,7 @@ func (d *SiteDetail) ScreenTitle() string {
 	return "Site Detail"
 }
 
-// DeleteSiteMsg signals the app to delete a site (with confirmation).
+// DeleteSiteMsg signals the app to delete a site.
 type DeleteSiteMsg struct{ Domain string }
 
 func boolToYesNo(b bool) string {

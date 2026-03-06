@@ -6,6 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jhin1m/juiscript/internal/backup"
+	"github.com/jhin1m/juiscript/internal/site"
+	"github.com/jhin1m/juiscript/internal/tui/components"
 	"github.com/jhin1m/juiscript/internal/tui/theme"
 )
 
@@ -17,27 +19,100 @@ type BackupScreen struct {
 	width   int
 	height  int
 	err     error
+	// Form for create backup
+	form       *components.FormModel
+	formActive bool
+	// Confirm for delete/restore
+	confirm       *components.ConfirmModel
+	pendingAction string // "delete" or "restore"
+	pendingTarget string // path for delete/restore
+	pendingDomain string // domain for restore
+	// Spinner for create/restore
+	spinner *components.SpinnerModel
 }
 
-// NewBackupScreen creates the backup management screen.
 func NewBackupScreen(t *theme.Theme) *BackupScreen {
-	return &BackupScreen{theme: t}
+	return &BackupScreen{
+		theme:   t,
+		confirm: components.NewConfirm(t),
+		spinner: components.NewSpinner(t),
+	}
 }
 
-// SetBackups updates the backup list.
 func (b *BackupScreen) SetBackups(backups []backup.BackupInfo) {
 	b.backups = backups
 	b.err = nil
 }
 
-// SetError sets an error to display.
 func (b *BackupScreen) SetError(err error) {
 	b.err = err
+}
+
+// StopSpinner deactivates the spinner (called by App on result).
+func (b *BackupScreen) StopSpinner() {
+	b.spinner.Stop()
 }
 
 func (b *BackupScreen) Init() tea.Cmd { return nil }
 
 func (b *BackupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Spinner ticks
+	if b.spinner.Active() {
+		_, cmd := b.spinner.Update(msg)
+		return b, cmd
+	}
+
+	// Confirm dialog
+	if b.confirm.Active() {
+		_, cmd := b.confirm.Update(msg)
+		if cmd != nil {
+			action := b.pendingAction
+			target := b.pendingTarget
+			domain := b.pendingDomain
+			b.pendingAction = ""
+			b.pendingTarget = ""
+			b.pendingDomain = ""
+			return b, func() tea.Msg {
+				result := cmd()
+				switch result.(type) {
+				case components.ConfirmYesMsg:
+					switch action {
+					case "delete":
+						return DeleteBackupMsg{Path: target}
+					case "restore":
+						return RestoreBackupMsg{Path: target, Domain: domain}
+					}
+				case components.ConfirmNoMsg:
+					// cancelled
+				}
+				return nil
+			}
+		}
+		return b, nil
+	}
+
+	// Form
+	if b.formActive {
+		_, cmd := b.form.Update(msg)
+		if cmd != nil {
+			result := cmd()
+			switch v := result.(type) {
+			case components.FormSubmitMsg:
+				b.formActive = false
+				domain := v.Values["domain"]
+				backupType := v.Values["type"]
+				spinCmd := b.spinner.Start("Creating backup for " + domain + "...")
+				return b, tea.Batch(spinCmd, func() tea.Msg {
+					return CreateBackupMsg{Domain: domain, Type: backupType}
+				})
+			case components.FormCancelMsg:
+				b.formActive = false
+				return b, nil
+			}
+		}
+		return b, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		b.width = msg.Width
@@ -54,21 +129,31 @@ func (b *BackupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				b.cursor++
 			}
 		case "c":
-			// Create new backup
-			return b, func() tea.Msg { return CreateBackupMsg{} }
+			// Create backup form
+			fields := []components.FormField{
+				{Key: "domain", Label: "Domain", Type: components.FieldText,
+					Placeholder: "example.com", Validate: site.ValidateDomain},
+				{Key: "type", Label: "Backup Type", Type: components.FieldSelect,
+					Options: []string{"full", "files", "database"}, Default: "full"},
+			}
+			b.form = components.NewForm(b.theme, "Create Backup", fields)
+			b.formActive = true
 		case "r":
-			// Restore selected backup
+			// Restore - confirm first
 			if len(b.backups) > 0 {
-				return b, func() tea.Msg {
-					return RestoreBackupMsg{Path: b.backups[b.cursor].Path}
-				}
+				bk := b.backups[b.cursor]
+				b.pendingAction = "restore"
+				b.pendingTarget = bk.Path
+				b.pendingDomain = bk.Domain
+				b.confirm.Show(fmt.Sprintf("Restore backup for '%s'? Current data will be overwritten.", bk.Domain))
 			}
 		case "d":
-			// Delete selected backup
+			// Delete - confirm first
 			if len(b.backups) > 0 {
-				return b, func() tea.Msg {
-					return DeleteBackupMsg{Path: b.backups[b.cursor].Path}
-				}
+				bk := b.backups[b.cursor]
+				b.pendingAction = "delete"
+				b.pendingTarget = bk.Path
+				b.confirm.Show(fmt.Sprintf("Delete backup '%s'? This cannot be undone.", bk.Domain))
 			}
 		case "esc", "q":
 			return b, func() tea.Msg { return GoBackMsg{} }
@@ -81,6 +166,18 @@ func (b *BackupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (b *BackupScreen) View() string {
 	title := b.theme.Title.Render("Backups")
 
+	if b.spinner.Active() {
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", b.spinner.View())
+	}
+
+	if b.confirm.Active() {
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", b.confirm.View())
+	}
+
+	if b.formActive && b.form != nil {
+		return b.form.View()
+	}
+
 	if b.err != nil {
 		errMsg := b.theme.ErrorText.Render(fmt.Sprintf("Error: %v", b.err))
 		return lipgloss.JoinVertical(lipgloss.Left, title, "", errMsg)
@@ -92,11 +189,9 @@ func (b *BackupScreen) View() string {
 		return lipgloss.JoinVertical(lipgloss.Left, title, "", empty, "", help)
 	}
 
-	// Table header
 	header := fmt.Sprintf("  %-30s %-12s %-20s", "DOMAIN", "SIZE", "CREATED")
 	headerStyle := b.theme.HelpKey.Render(header)
 
-	// Table rows
 	var rows string
 	for i, bk := range b.backups {
 		cursor := "  "
@@ -124,10 +219,14 @@ func (b *BackupScreen) View() string {
 func (b *BackupScreen) ScreenTitle() string { return "Backup" }
 
 // Messages for backup screen actions
-type CreateBackupMsg struct{}
+type CreateBackupMsg struct {
+	Domain string
+	Type   string
+}
 
 type RestoreBackupMsg struct {
-	Path string
+	Path   string
+	Domain string
 }
 
 type DeleteBackupMsg struct {

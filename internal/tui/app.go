@@ -126,6 +126,7 @@ type App struct {
 	sslScreen        *screens.SSLScreen
 	backupScreen     *screens.BackupScreen
 	setupScreen      *screens.SetupScreen
+	toast            *components.ToastModel
 	setupProgressCh  chan provisioner.ProgressEvent // nil when not installing
 	installSummary   *provisioner.InstallSummary   // captured from goroutine for done screen
 	width            int
@@ -155,6 +156,7 @@ func NewApp(cfg *config.Config, deps AppDeps) *App {
 		sslMgr:        deps.SSLMgr,
 		supervisorMgr: deps.SuperMgr,
 		backupMgr:     deps.BackupMgr,
+		toast:       components.NewToast(t),
 		current:     ScreenDashboard,
 		dashboard:   screens.NewDashboard(t),
 		siteList:    screens.NewSiteList(t),
@@ -243,6 +245,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.serviceBar.SetWidth(msg.Width)
 		return a, a.updateActiveScreen(msg)
 
+	case components.ToastDismissMsg:
+		a.toast.Update(msg)
+		return a, nil
+
 	case ServiceStatusMsg:
 		a.serviceBar.SetServices(msg.Services)
 		a.servicesScreen.SetServices(msg.Services)
@@ -277,10 +283,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case PHPVersionsMsg:
+		a.phpScreen.StopSpinner()
 		a.phpScreen.SetVersions(msg.Versions)
 		return a, nil
 
 	case PHPVersionsErrMsg:
+		a.phpScreen.StopSpinner()
 		a.phpScreen.SetError(msg.Err)
 		return a, nil
 
@@ -385,10 +393,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// PHP screen messages
 	case screens.InstallPHPMsg:
-		// InstallPHPMsg has no version field -- needs version picker form (not yet implemented)
-		return a, func() tea.Msg {
-			return PHPVersionsErrMsg{Err: fmt.Errorf("PHP install requires a version selector (not yet implemented)")}
-		}
+		return a, a.handleInstallPHP(msg.Version)
 
 	case screens.RemovePHPMsg:
 		return a, a.handleRemovePHP(msg.Version)
@@ -404,20 +409,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Database screen messages
 	case screens.CreateDBMsg:
-		return a, a.handleCreateDB()
+		return a, a.handleCreateDB(msg.Name)
 
 	case screens.DropDBMsg:
 		return a, a.handleDropDB(msg.Name)
 
 	case screens.ImportDBMsg:
-		return a, a.handleImportDB(msg.Name)
+		return a, a.handleImportDB(msg.Name, msg.Path)
 
 	case screens.ExportDBMsg:
 		return a, a.handleExportDB(msg.Name)
 
 	// SSL screen messages
 	case screens.ObtainCertMsg:
-		return a, a.handleObtainCert()
+		return a, a.handleObtainCert(msg.Domain, msg.Email)
 
 	case screens.RevokeCertMsg:
 		return a, a.handleRevokeCert(msg.Domain)
@@ -453,10 +458,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Backup screen messages
 	case screens.CreateBackupMsg:
-		return a, a.handleCreateBackup()
+		return a, a.handleCreateBackup(msg.Domain, msg.Type)
 
 	case screens.RestoreBackupMsg:
-		return a, a.handleRestoreBackup(msg.Path)
+		return a, a.handleRestoreBackup(msg.Path, msg.Domain)
 
 	case screens.DeleteBackupMsg:
 		return a, a.handleDeleteBackup(msg.Path)
@@ -475,16 +480,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case SiteCreatedMsg:
 		a.current = ScreenSites
-		return a, a.fetchSites()
+		toastCmd := a.toast.Show(components.ToastSuccess, "Site created successfully")
+		return a, tea.Batch(toastCmd, a.fetchSites())
 	case SiteOpDoneMsg:
-		return a, a.fetchSites()
+		toastCmd := a.toast.Show(components.ToastSuccess, "Site operation completed")
+		return a, tea.Batch(toastCmd, a.fetchSites())
 	case SiteOpErrMsg:
-		// If error occurs while on detail screen, navigate back to list
 		if a.current == ScreenSiteDetail {
 			a.current = ScreenSites
 		}
 		a.siteList.SetError(msg.Err)
-		return a, nil
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
 
 	// Nginx results
 	case VhostListMsg:
@@ -494,12 +501,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.nginxScreen.SetError(msg.Err)
 		return a, nil
 	case NginxOpDoneMsg:
-		return a, a.fetchVhosts()
+		toastCmd := a.toast.Show(components.ToastSuccess, "Nginx operation completed")
+		return a, tea.Batch(toastCmd, a.fetchVhosts())
 	case NginxOpErrMsg:
 		a.nginxScreen.SetError(msg.Err)
-		return a, nil
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
 	case NginxTestOkMsg:
-		return a, a.fetchVhosts()
+		toastCmd := a.toast.Show(components.ToastSuccess, "Nginx config test passed")
+		return a, tea.Batch(toastCmd, a.fetchVhosts())
 
 	// Database results
 	case DBListMsg:
@@ -509,28 +519,37 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.databaseScreen.SetError(msg.Err)
 		return a, nil
 	case DBOpDoneMsg:
-		return a, a.fetchDatabases()
+		toastCmd := a.toast.Show(components.ToastSuccess, "Database operation completed")
+		return a, tea.Batch(toastCmd, a.fetchDatabases())
 	case DBOpErrMsg:
 		a.databaseScreen.SetError(msg.Err)
-		return a, nil
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
 
 	// SSL results
 	case CertListMsg:
+		a.sslScreen.StopSpinner()
 		a.sslScreen.SetCerts(msg.Certs)
 		return a, nil
 	case CertListErrMsg:
+		a.sslScreen.StopSpinner()
 		a.sslScreen.SetError(msg.Err)
 		return a, nil
 	case SSLOpDoneMsg:
-		return a, a.fetchCerts()
+		a.sslScreen.StopSpinner()
+		toastCmd := a.toast.Show(components.ToastSuccess, "SSL operation completed")
+		return a, tea.Batch(toastCmd, a.fetchCerts())
 	case SSLOpErrMsg:
+		a.sslScreen.StopSpinner()
 		a.sslScreen.SetError(msg.Err)
-		return a, nil
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
 
 	// Service results (ServiceStatusMsg already handled above)
 	case ServiceOpErrMsg:
 		a.servicesScreen.SetError(msg.Err)
-		return a, nil
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
 
 	// Queue results
 	case WorkerListMsg:
@@ -540,23 +559,31 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.queuesScreen.SetError(msg.Err)
 		return a, nil
 	case QueueOpDoneMsg:
-		return a, a.fetchWorkers()
+		toastCmd := a.toast.Show(components.ToastSuccess, "Queue operation completed")
+		return a, tea.Batch(toastCmd, a.fetchWorkers())
 	case QueueOpErrMsg:
 		a.queuesScreen.SetError(msg.Err)
-		return a, nil
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
 
 	// Backup results
 	case BackupListMsg:
+		a.backupScreen.StopSpinner()
 		a.backupScreen.SetBackups(msg.Backups)
 		return a, nil
 	case BackupListErrMsg:
+		a.backupScreen.StopSpinner()
 		a.backupScreen.SetError(msg.Err)
 		return a, nil
 	case BackupOpDoneMsg:
-		return a, a.fetchBackups("")
+		a.backupScreen.StopSpinner()
+		toastCmd := a.toast.Show(components.ToastSuccess, "Backup operation completed")
+		return a, tea.Batch(toastCmd, a.fetchBackups(""))
 	case BackupOpErrMsg:
+		a.backupScreen.StopSpinner()
 		a.backupScreen.SetError(msg.Err)
-		return a, nil
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
 	}
 
 	// Delegate to active screen
@@ -667,7 +694,14 @@ func (a *App) View() string {
 	statusBar := a.statusBar.View(bindings)
 
 	svcBar := a.serviceBar.View()
-	return fmt.Sprintf("%s\n%s\n\n%s\n\n%s", header, svcBar, content, statusBar)
+
+	// Toast notification between content and status bar
+	toastLine := a.toast.View()
+	if toastLine != "" {
+		toastLine = "\n" + toastLine
+	}
+
+	return fmt.Sprintf("%s\n%s\n\n%s%s\n\n%s", header, svcBar, content, toastLine, statusBar)
 }
 
 func (a *App) screenTitle() string {

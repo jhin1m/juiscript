@@ -1,9 +1,10 @@
 package tui
 
 import (
-	"fmt"
+	"context"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/backup"
 )
 
 // fetchBackups loads the backup list for a domain (empty string lists all).
@@ -20,23 +21,33 @@ func (a *App) fetchBackups(domain string) tea.Cmd {
 	}
 }
 
-// handleCreateBackup is a placeholder -- needs domain + type selection form.
-func (a *App) handleCreateBackup() tea.Cmd {
+// handleCreateBackup creates a backup for a domain with the given type.
+func (a *App) handleCreateBackup(domain, backupType string) tea.Cmd {
 	if a.backupMgr == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		return BackupOpErrMsg{Err: fmt.Errorf("backup creation requires domain and type selection (not yet implemented)")}
+		opts := backup.Options{
+			Domain: domain,
+			Type:   backup.BackupType(backupType),
+		}
+		if _, err := a.backupMgr.Create(context.Background(), opts); err != nil {
+			return BackupOpErrMsg{Err: err}
+		}
+		return BackupOpDoneMsg{}
 	}
 }
 
-// handleRestoreBackup is a placeholder -- needs domain context for restore.
-func (a *App) handleRestoreBackup(path string) tea.Cmd {
+// handleRestoreBackup restores a backup to a domain.
+func (a *App) handleRestoreBackup(path, domain string) tea.Cmd {
 	if a.backupMgr == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		return BackupOpErrMsg{Err: fmt.Errorf("restore requires domain context (not yet implemented)")}
+		if err := a.backupMgr.Restore(context.Background(), path, domain); err != nil {
+			return BackupOpErrMsg{Err: err}
+		}
+		return BackupOpDoneMsg{}
 	}
 }
 

@@ -21,13 +21,16 @@ func (a *App) fetchDatabases() tea.Cmd {
 	}
 }
 
-// handleCreateDB is a placeholder -- needs a form screen for name input.
-func (a *App) handleCreateDB() tea.Cmd {
+// handleCreateDB creates a database with the given name.
+func (a *App) handleCreateDB(name string) tea.Cmd {
 	if a.dbMgr == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		return DBOpErrMsg{Err: fmt.Errorf("database creation requires a name input form (not yet implemented)")}
+		if err := a.dbMgr.CreateDB(context.Background(), name); err != nil {
+			return DBOpErrMsg{Err: err}
+		}
+		return DBOpDoneMsg{}
 	}
 }
 
@@ -44,13 +47,16 @@ func (a *App) handleDropDB(name string) tea.Cmd {
 	}
 }
 
-// handleImportDB is a placeholder -- needs a form screen for file path input.
-func (a *App) handleImportDB(name string) tea.Cmd {
+// handleImportDB imports a SQL file into a database.
+func (a *App) handleImportDB(name, path string) tea.Cmd {
 	if a.dbMgr == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		return DBOpErrMsg{Err: fmt.Errorf("import requires a file path input form (not yet implemented)")}
+		if err := a.dbMgr.Import(context.Background(), name, path); err != nil {
+			return DBOpErrMsg{Err: err}
+		}
+		return DBOpDoneMsg{}
 	}
 }
 
