@@ -5,10 +5,16 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jhin1m/juiscript/internal/backup"
 	"github.com/jhin1m/juiscript/internal/config"
+	"github.com/jhin1m/juiscript/internal/database"
+	"github.com/jhin1m/juiscript/internal/nginx"
 	"github.com/jhin1m/juiscript/internal/php"
 	"github.com/jhin1m/juiscript/internal/provisioner"
 	"github.com/jhin1m/juiscript/internal/service"
+	"github.com/jhin1m/juiscript/internal/site"
+	"github.com/jhin1m/juiscript/internal/ssl"
+	"github.com/jhin1m/juiscript/internal/supervisor"
 	"github.com/jhin1m/juiscript/internal/tui/components"
 	"github.com/jhin1m/juiscript/internal/tui/screens"
 	"github.com/jhin1m/juiscript/internal/tui/theme"
@@ -75,6 +81,20 @@ var screenNames = map[string]Screen{
 	"Setup":    ScreenSetup,
 }
 
+// AppDeps groups all backend managers for injection into App.
+// All fields can be nil for graceful degradation.
+type AppDeps struct {
+	SvcMgr    *service.Manager
+	Prov      *provisioner.Provisioner
+	PHPMgr    *php.Manager
+	SiteMgr   *site.Manager
+	NginxMgr  *nginx.Manager
+	DBMgr     *database.Manager
+	SSLMgr    *ssl.Manager
+	SuperMgr  *supervisor.Manager
+	BackupMgr *backup.Manager
+}
+
 // App is the root Bubble Tea model.
 // It acts as a screen router, delegating to child models.
 type App struct {
@@ -83,9 +103,15 @@ type App struct {
 	statusBar  *components.StatusBar
 	serviceBar *components.ServiceStatusBar
 	cfg        *config.Config
-	svcMgr     *service.Manager
-	prov       *provisioner.Provisioner
-	phpMgr     *php.Manager
+	svcMgr        *service.Manager
+	prov          *provisioner.Provisioner
+	phpMgr        *php.Manager
+	siteMgr       *site.Manager
+	nginxMgr      *nginx.Manager
+	dbMgr         *database.Manager
+	sslMgr        *ssl.Manager
+	supervisorMgr *supervisor.Manager
+	backupMgr     *backup.Manager
 	current     Screen
 	previous    Screen // for back navigation from sub-screens
 	dashboard   *screens.Dashboard
@@ -107,8 +133,8 @@ type App struct {
 }
 
 // NewApp creates the root TUI application.
-// cfg, svcMgr, prov and phpMgr can be nil — graceful degradation.
-func NewApp(cfg *config.Config, svcMgr *service.Manager, prov *provisioner.Provisioner, phpMgr *php.Manager) *App {
+// cfg can be nil (uses defaults). All managers in deps can be nil — graceful degradation.
+func NewApp(cfg *config.Config, deps AppDeps) *App {
 	t := theme.New()
 	if cfg == nil {
 		cfg = config.Default()
@@ -119,10 +145,16 @@ func NewApp(cfg *config.Config, svcMgr *service.Manager, prov *provisioner.Provi
 		header:     components.NewHeader(t),
 		statusBar:  components.NewStatusBar(t),
 		serviceBar: components.NewServiceStatusBar(t),
-		cfg:        cfg,
-		svcMgr:     svcMgr,
-		prov:       prov,
-		phpMgr:     phpMgr,
+		cfg:           cfg,
+		svcMgr:        deps.SvcMgr,
+		prov:          deps.Prov,
+		phpMgr:        deps.PHPMgr,
+		siteMgr:       deps.SiteMgr,
+		nginxMgr:      deps.NginxMgr,
+		dbMgr:         deps.DBMgr,
+		sslMgr:        deps.SSLMgr,
+		supervisorMgr: deps.SuperMgr,
+		backupMgr:     deps.BackupMgr,
 		current:     ScreenDashboard,
 		dashboard:   screens.NewDashboard(t),
 		siteList:    screens.NewSiteList(t),
