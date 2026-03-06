@@ -245,6 +245,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ServiceStatusMsg:
 		a.serviceBar.SetServices(msg.Services)
+		a.servicesScreen.SetServices(msg.Services)
 		return a, nil
 
 	case ServiceStatusErrMsg:
@@ -478,6 +479,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SiteOpDoneMsg:
 		return a, a.fetchSites()
 	case SiteOpErrMsg:
+		// If error occurs while on detail screen, navigate back to list
+		if a.current == ScreenSiteDetail {
+			a.current = ScreenSites
+		}
 		a.siteList.SetError(msg.Err)
 		return a, nil
 
