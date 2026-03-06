@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jhin1m/juiscript/internal/config"
+	"github.com/jhin1m/juiscript/internal/php"
 	"github.com/jhin1m/juiscript/internal/provisioner"
 	"github.com/jhin1m/juiscript/internal/service"
 	"github.com/jhin1m/juiscript/internal/tui/components"
@@ -30,6 +31,16 @@ type DetectPackagesMsg struct {
 
 // DetectPackagesErrMsg reports a failure to detect packages.
 type DetectPackagesErrMsg struct {
+	Err error
+}
+
+// PHPVersionsMsg delivers installed PHP versions to the PHP screen.
+type PHPVersionsMsg struct {
+	Versions []php.VersionInfo
+}
+
+// PHPVersionsErrMsg reports a failure to list PHP versions.
+type PHPVersionsErrMsg struct {
 	Err error
 }
 
@@ -74,6 +85,7 @@ type App struct {
 	cfg        *config.Config
 	svcMgr     *service.Manager
 	prov       *provisioner.Provisioner
+	phpMgr     *php.Manager
 	current     Screen
 	previous    Screen // for back navigation from sub-screens
 	dashboard   *screens.Dashboard
@@ -89,13 +101,14 @@ type App struct {
 	backupScreen     *screens.BackupScreen
 	setupScreen      *screens.SetupScreen
 	setupProgressCh  chan provisioner.ProgressEvent // nil when not installing
+	installSummary   *provisioner.InstallSummary   // captured from goroutine for done screen
 	width            int
 	height           int
 }
 
 // NewApp creates the root TUI application.
-// cfg, svcMgr and prov can be nil — graceful degradation.
-func NewApp(cfg *config.Config, svcMgr *service.Manager, prov *provisioner.Provisioner) *App {
+// cfg, svcMgr, prov and phpMgr can be nil — graceful degradation.
+func NewApp(cfg *config.Config, svcMgr *service.Manager, prov *provisioner.Provisioner, phpMgr *php.Manager) *App {
 	t := theme.New()
 	if cfg == nil {
 		cfg = config.Default()
@@ -109,6 +122,7 @@ func NewApp(cfg *config.Config, svcMgr *service.Manager, prov *provisioner.Provi
 		cfg:        cfg,
 		svcMgr:     svcMgr,
 		prov:       prov,
+		phpMgr:     phpMgr,
 		current:     ScreenDashboard,
 		dashboard:   screens.NewDashboard(t),
 		siteList:    screens.NewSiteList(t),
@@ -144,6 +158,20 @@ func (a *App) fetchServiceStatus() tea.Cmd {
 			return ServiceStatusErrMsg{Err: err}
 		}
 		return ServiceStatusMsg{Services: statuses}
+	}
+}
+
+// fetchPHPVersions returns a tea.Cmd that loads installed PHP versions asynchronously.
+func (a *App) fetchPHPVersions() tea.Cmd {
+	if a.phpMgr == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		versions, err := a.phpMgr.ListVersions(context.Background())
+		if err != nil {
+			return PHPVersionsErrMsg{Err: err}
+		}
+		return PHPVersionsMsg{Versions: versions}
 	}
 }
 
@@ -215,6 +243,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Silently ignore — setup screen remains empty
 		return a, nil
 
+	case PHPVersionsMsg:
+		a.phpScreen.SetVersions(msg.Versions)
+		return a, nil
+
+	case PHPVersionsErrMsg:
+		a.phpScreen.SetError(msg.Err)
+		return a, nil
+
 	case tea.KeyMsg:
 		// Global quit: ctrl+c always quits
 		if msg.String() == "ctrl+c" {
@@ -231,7 +267,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.previous = a.current
 			a.current = screen
 		}
-		return a, a.fetchServiceStatus()
+		// Fetch PHP versions when navigating to PHP screen
+		cmds := []tea.Cmd{a.fetchServiceStatus()}
+		if a.current == ScreenPHP {
+			cmds = append(cmds, a.fetchPHPVersions())
+		}
+		return a, tea.Batch(cmds...)
 
 	case screens.GoBackMsg:
 		return a.goBack(), a.fetchServiceStatus()
@@ -243,9 +284,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ch := make(chan provisioner.ProgressEvent, 10)
 		a.setupProgressCh = ch
 		go func() {
-			a.prov.InstallSelected(context.Background(), msg.Names, func(ev provisioner.ProgressEvent) {
+			summary, _ := a.prov.InstallSelected(context.Background(), msg.Names, func(ev provisioner.ProgressEvent) {
 				ch <- ev
 			})
+			// Store summary so SetupDoneMsg can carry it to the done screen
+			a.installSummary = summary
 			close(ch)
 		}()
 		return a, waitForProgress(ch)
@@ -256,10 +299,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, waitForProgress(a.setupProgressCh)
 
 	case screens.SetupDoneMsg:
-		// Forward to setup screen, clean up channel, re-detect
+		// Attach captured summary so done screen shows correct counts
+		msg.Summary = a.installSummary
+		a.installSummary = nil
 		a.setupScreen.Update(msg)
 		a.setupProgressCh = nil
-		return a, tea.Batch(a.detectPackages(), a.fetchServiceStatus())
+		return a, tea.Batch(a.detectPackages(), a.fetchServiceStatus(), a.fetchPHPVersions())
 
 	// Site-specific navigation messages
 	case screens.ShowCreateFormMsg:

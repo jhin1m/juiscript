@@ -71,7 +71,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	phpMgr := php.NewManager(exec, fileMgr, tplEngine)
 	svcMgr := service.NewManager(exec)
 	prov := provisioner.NewProvisioner(exec, phpMgr)
-	app := tui.NewApp(cfg, svcMgr, prov)
+	app := tui.NewApp(cfg, svcMgr, prov, phpMgr)
 
 	// tea.WithAltScreen uses the alternate terminal buffer
 	// so the TUI doesn't mess up your terminal history

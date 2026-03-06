@@ -386,10 +386,10 @@ func (s *SetupScreen) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "enter":
 			names := s.selectedNames()
-			// Init progress lines for install
-			s.progress = make([]progressLine, len(names))
-			for i, name := range names {
-				s.progress[i] = progressLine{Name: name, Status: "pending"}
+			// Init progress lines: "system" for apt-get update + each package
+			s.progress = []progressLine{{Name: "system", Status: "pending"}}
+			for _, name := range names {
+				s.progress = append(s.progress, progressLine{Name: name, Status: "pending"})
 			}
 			s.state = stateInstalling
 			return s, tea.Batch(

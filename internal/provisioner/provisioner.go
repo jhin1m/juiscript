@@ -66,10 +66,16 @@ func (p *Provisioner) InstallSelected(ctx context.Context, names []string, progr
 		}
 	}
 
+	// Emit progress so TUI knows we're working (apt-get update can take 10-60s)
+	emit(ProgressEvent{PackageName: "system", Status: ProgressStarting, Message: "Updating package lists..."})
+
 	// Single apt-get update before batch
 	if err := p.installer.AptUpdate(ctx); err != nil {
+		emit(ProgressEvent{PackageName: "system", Status: ProgressError, Message: err.Error()})
 		return nil, err
 	}
+
+	emit(ProgressEvent{PackageName: "system", Status: ProgressDone, Message: "Package lists updated"})
 
 	for _, name := range names {
 		// Bail early if context cancelled (e.g. user aborted)
