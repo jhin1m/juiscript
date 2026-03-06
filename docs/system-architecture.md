@@ -67,14 +67,22 @@ juiscript version      → Print version
 - Backup operations: BackupListMsg, BackupListErrMsg, BackupOpDoneMsg, BackupOpErrMsg
 - Pattern: Each operation has success (msg) and failure (errMsg) variants
 
-**internal/tui/screens/** (Full-Screen Views)
+**internal/tui/screens/** (Full-Screen Views - Phase 5-6: Forms + Feedback Complete)
 - `dashboard.go`: Main menu with 8 feature links
-- Other screens implement Bubble Tea Model interface
+- `php.go`: Version list with install/remove forms, spinner for install, confirmation for remove
+- `database.go`: DB list with create/import forms, confirmation for drop
+- `ssl.go`: Certificate list with obtain form, spinner for certbot, confirmation for revoke
+- `backup.go`: Backup list with create form, spinners for create/restore, confirmation for delete/restore
+- `sitedetail.go`: Site details with confirmation for delete
+- All screens implement Bubble Tea Model interface with form/spinner/confirmation integration
 
-**internal/tui/components/** (Reusable Parts)
+**internal/tui/components/** (Reusable Parts - Phase 5-6 Complete)
 - `header.go`: App title and current screen name
 - `statusbar.go`: Keyboard shortcuts at bottom
-- `form.go` (Phase 6): Generic step-by-step form component (FieldText, FieldSelect, FieldConfirm)
+- `form.go` (Phase 5-6): Generic step-by-step form component (FieldText, FieldSelect, FieldConfirm) - fully integrated
+- `confirm.go` (Phase 5-6): Modal confirmation dialog for destructive actions
+- `spinner.go` (Phase 5-6): Loading spinner for long-running operations
+- `toast.go` (Phase 5-6): Toast notifications for operation results (success/error)
 - `service-status-bar.go`: Horizontal health indicator for LEMP services (Phase 01)
 - `theme.go`: Centralized colors and styles (Lip Gloss)
 
@@ -775,6 +783,170 @@ Return: Consolidated PackageInfo list
 - /etc/php/ missing/unreadable → Returns PHP placeholder
 - Returns (false, "") for any package detection error
 - No exceptions thrown, graceful degradation
+
+## TUI Input Forms Implementation (Phases 5-6)
+
+### Form Input Workflow
+
+**Phase 5 - Form Wiring**: Screens embed FormModel for data collection
+```
+User presses action key (i=install, c=create, o=obtain)
+    ↓
+Screen creates form with fields and displays it
+    ↓
+User fills form fields (text input, dropdown select)
+    ↓
+FormSubmitMsg emitted with collected values
+    ↓
+Screen converts form data → operation message
+    ↓
+App receives message and calls handler with parameters
+    ↓
+Handler executes backend manager operation
+```
+
+**Phase 6 - Feedback**: Confirmation, spinner, toast complete flow
+```
+Handler starts async operation
+    ↓
+Screen shows spinner ("Installing PHP 8.3...")
+    ↓
+Operation completes in background
+    ↓
+App receives OpDoneMsg or OpErrMsg
+    ↓
+Toast notification shows result (success or error)
+    ↓
+Screen updates with refreshed data
+```
+
+### Form Fields per Screen
+
+**PHP Screen** (internal/tui/screens/php.go)
+- Install form: `version` (FieldSelect) → InstallPHPMsg{Version}
+- Keypress: `i` to install, `r` to remove (with confirmation)
+
+**Database Screen** (internal/tui/screens/database.go)
+- Create form: `name` (FieldText, validateDBName) → CreateDBMsg{Name}
+- Import form: `path` (FieldText, validateFilePath) → ImportDBMsg{Name, Path}
+- Keypress: `c` to create, `i` to import, `d` to drop (with confirmation)
+
+**SSL Screen** (internal/tui/screens/ssl.go)
+- Obtain form: `domain`, `email` (FieldText) → ObtainCertMsg{Domain, Email}
+- Spinner during certbot execution
+- Keypress: `o` to obtain, `r` to revoke (with confirmation)
+
+**Backup Screen** (internal/tui/screens/backup.go)
+- Create form: `domain` (FieldText), `type` (FieldSelect: full/files/database) → CreateBackupMsg{Domain, Type}
+- Restore: Selected from list, confirmation required
+- Spinners for create and restore operations
+- Keypress: `c` to create, `r` to restore (confirm), `d` to delete (confirm)
+
+### Feedback Components
+
+**Toast Notifications** (app.go)
+- Single instance in App struct
+- Shows for all OpDoneMsg/OpErrMsg (operation results)
+- Auto-dismisses after 3 seconds
+- Types: ToastSuccess (green), ToastError (red)
+- Examples: "PHP 8.3 installed", "Database 'mydb' dropped", "Error: Domain exists"
+
+**Spinners** (php.go, ssl.go, backup.go)
+- Per-screen instance for long operations
+- Animated loading indicator while operation in progress
+- Stopped when app receives operation result
+- Shows contextual message: "Installing PHP 8.3...", "Creating backup..."
+
+**Confirmations** (php.go, database.go, ssl.go, backup.go, sitedetail.go)
+- Gate destructive actions: remove PHP, drop DB, delete site, revoke cert, delete/restore backup
+- Modal dialog with [Y/n] prompt
+- Prevents accidental data loss
+- Examples:
+  - "Remove PHP 8.2? Sites using it will break."
+  - "Drop database 'olddb'? This cannot be undone."
+  - "Delete backup 'site_2026-03-06.tar.gz'?"
+
+### Message Type Updates (Phase 5)
+
+| Message | Phase 5 Fields | Sender | Receiver |
+|---------|---|---|---|
+| `InstallPHPMsg` | `Version string` | PHP screen form → App | app_handlers_php |
+| `RemovePHPMsg` | `Version string` | PHP confirm → App | app_handlers_php |
+| `CreateDBMsg` | `Name string` | DB screen form → App | app_handlers_db |
+| `ImportDBMsg` | `Name, Path string` | DB screen form → App | app_handlers_db |
+| `DropDBMsg` | `Name string` | DB confirm → App | app_handlers_db |
+| `ObtainCertMsg` | `Domain, Email string` | SSL form → App | app_handlers_ssl |
+| `RevokeCertMsg` | `Domain string` | SSL confirm → App | app_handlers_ssl |
+| `CreateBackupMsg` | `Domain, Type string` | Backup form → App | app_handlers_backup |
+| `RestoreBackupMsg` | `Path, Domain string` | Backup confirm → App | app_handlers_backup |
+| `DeleteBackupMsg` | `Path string` | Backup confirm → App | app_handlers_backup |
+| `DeleteSiteMsg` | `Domain string` | SiteDetail confirm → App | app_handlers_site |
+
+### Handler Implementation (Phase 5)
+
+All handlers converted from stubs to real implementations:
+
+**app_handlers_php.go**
+```go
+func (a *App) handleInstallPHP(version string) tea.Cmd {
+    return func() tea.Msg {
+        // a.phpMgr.InstallVersion(ctx, version)
+        return PHPInstalledMsg{Version: version}
+    }
+}
+```
+
+**app_handlers_db.go**
+```go
+func (a *App) handleCreateDB(name string) tea.Cmd { /* ... */ }
+func (a *App) handleImportDB(name, path string) tea.Cmd { /* ... */ }
+func (a *App) handleDropDB(name string) tea.Cmd { /* ... */ }
+```
+
+**app_handlers_ssl.go**
+```go
+func (a *App) handleObtainCert(domain, email string) tea.Cmd {
+    // Derives webRoot from config: cfg.SitesRoot + "/" + domain
+    return func() tea.Msg { /* ... */ }
+}
+```
+
+**app_handlers_backup.go**
+```go
+func (a *App) handleCreateBackup(domain, backupType string) tea.Cmd {
+    // Converts string type to backup.BackupType enum
+    return func() tea.Msg { /* ... */ }
+}
+func (a *App) handleRestoreBackup(path, domain string) tea.Cmd { /* ... */ }
+```
+
+### Key Architectural Patterns
+
+**Form Priority** (screens)
+```
+if form.Active() { delegate keys to form }
+else if confirm.Active() { delegate keys to confirm }
+else if spinner.Active() { forward tick message }
+else { normal key handling }
+```
+
+**Operation Result Handling** (app.go)
+```
+Receive OpDoneMsg/OpErrMsg
+    ↓
+Show toast (success/error message)
+    ↓
+Call screen.StopSpinner()
+    ↓
+Fetch updated data (list refresh)
+    ↓
+Re-render screen with new state
+```
+
+**Spinner Control**
+- Started by screen when form submitted
+- Stopped by App when result message received
+- Example: `s.spinner.Start("Installing...")` → handler → `a.phpScreen.StopSpinner()`
 
 ## Logging & Monitoring
 

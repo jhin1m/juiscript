@@ -1,5 +1,7 @@
 # Phase 1.5: Refactor SiteCreate to Use FormModel
 
+**Status: DONE** (2026-03-06)
+
 ## Context
 - [Plan overview](./plan.md)
 - Depends on: Phase 1 (FormModel component)
@@ -72,17 +74,17 @@ return s, func() tea.Msg { return CreateSiteMsg{Options: opts} }
 ## Implementation Steps
 
 ### TODO
-- [ ] Add `phpVersions []string` field to SiteCreate, populate from App on navigate
-- [ ] Replace step/input/err fields with `form *FormModel`
-- [ ] Define form fields using FormField slice
-- [ ] Update `Update()` to delegate to form.Update()
-- [ ] Handle FormSubmitMsg: construct CreateSiteMsg from form values
-- [ ] Handle FormCancelMsg: emit GoBackMsg
-- [ ] Update `View()` to render form.View()
-- [ ] Remove old handleEnter/handleNext/handlePrev methods
-- [ ] Remove step enum constants
-- [ ] Run `make test` to verify no regressions
-- [ ] Manual test: create site flow works end-to-end
+- [x] Add `phpVersions []string` field to SiteCreate, populate from App on navigate
+- [x] Replace step/input/err fields with `form *FormModel`
+- [x] Define form fields using FormField slice
+- [x] Update `Update()` to delegate to form.Update()
+- [x] Handle FormSubmitMsg: construct CreateSiteMsg from form values
+- [x] Handle FormCancelMsg: emit GoBackMsg
+- [x] Update `View()` to render form.View()
+- [x] Remove old handleEnter/handleNext/handlePrev methods
+- [x] Remove step enum constants
+- [x] Run `make test` to verify no regressions
+- [x] Manual test: create site flow works end-to-end
 
 ## Success Criteria
 - SiteCreate uses FormModel internally

@@ -1,7 +1,7 @@
 ---
 title: "Phase 2: TUI Input Forms & Feedback"
 description: "Add reusable form component, confirmation dialogs, spinners, and toast notifications to TUI screens"
-status: in_progress
+status: done
 priority: P1
 effort: 9h
 branch: main
@@ -19,15 +19,15 @@ Create a reusable `FormModel` component (DRY) following sitecreate.go's step-by-
 
 ## Phases
 
-| # | Phase | Effort | Files |
-|---|-------|--------|-------|
-| 1 | [Reusable Form Component](./phase1-form-component.md) | 2h | `components/form.go`, `components/form_test.go` |
-| 1.5 | [Refactor SiteCreate](./phase1.5-refactor-sitecreate.md) | 1.5h | `screens/sitecreate.go` |
-| 2 | [Confirmation Dialog](./phase2-confirm-dialog.md) | 1h | `components/confirm.go`, `components/confirm_test.go` |
-| 3 | [Toast Notification](./phase3-toast.md) | 1h | `components/toast.go`, `components/toast_test.go` |
-| 4 | [Spinner Component](./phase4-spinner.md) | 30m | `components/spinner.go` |
-| 5 | [Wire Form Screens](./phase5-wire-forms.md) | 2h | `php.go`, `database.go`, `ssl.go`, `backup.go`, handlers |
-| 6 | [Wire Feedback Components](./phase6-wire-feedback.md) | 1h | `app.go`, screen files |
+| # | Phase | Effort | Status | Files |
+|---|-------|--------|--------|-------|
+| 1 | [Reusable Form Component](./phase1-form-component.md) | 2h | - | `components/form.go`, `components/form_test.go` |
+| 1.5 | [Refactor SiteCreate](./phase1.5-refactor-sitecreate.md) | 1.5h | DONE 2026-03-06 | `screens/sitecreate.go` |
+| 2 | [Confirmation Dialog](./phase2-confirm-dialog.md) | 1h | DONE 2026-03-06 | `components/confirm.go`, `components/confirm_test.go` |
+| 3 | [Toast Notification](./phase3-toast.md) | 1h | DONE 2026-03-06 | `components/toast.go`, `components/toast_test.go` |
+| 4 | [Spinner Component](./phase4-spinner.md) | 30m | DONE 2026-03-06 | `components/spinner.go` |
+| 5 | [Wire Form Screens](./phase5-wire-forms.md) | 2h | DONE 2026-03-06 | `php.go`, `database.go`, `ssl.go`, `backup.go`, handlers |
+| 6 | [Wire Feedback Components](./phase6-wire-feedback.md) | 1h | DONE 2026-03-06 | `app.go`, screen files |
 
 ## Key Design Decisions
 - **Custom keys, NOT huh library** - match sitecreate.go pattern

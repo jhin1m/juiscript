@@ -177,6 +177,21 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
   - TUI service management screen
   - 16+ unit tests
 
+- **Phase 5-6** (Complete): TUI Input Forms & Feedback
+  - **Phase 5**: Form component wiring to all operation screens
+    - PHP screen: version picker form for install, confirmation for remove
+    - Database screen: create/import forms with dual modes, confirmation for drop
+    - SSL screen: domain+email form for certificate obtain, confirmation for revoke
+    - Backup screen: domain+type form for create, confirmation for delete/restore
+    - SiteDetail: confirmation for delete
+    - All message types updated with parameter fields
+    - All handlers converted from stubs to real implementations
+  - **Phase 6**: Feedback components for UX polish
+    - Toast notifications: success/error toasts for all operation results (app-level)
+    - Spinners: loading indicators for long operations (PHP install, backup create/restore, SSL obtain)
+    - Confirmations: modal dialogs for destructive actions (remove, drop, delete, revoke)
+    - Complete operation flow: form → validation → spinner → result toast → refresh
+
 ## Dependencies
 
 ### Go Modules

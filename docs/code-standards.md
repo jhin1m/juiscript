@@ -189,10 +189,26 @@ logger.Error("operation failed",
 ## Bubble Tea TUI Patterns
 
 ### Message Types
-Use custom types for custom messages:
+Use custom types for custom messages with parameters (Phase 5+):
 ```go
-type NavigateMsg struct {
-    Screen string
+// Action message with form data
+type InstallPHPMsg struct {
+    Version string
+}
+
+// Result message (success)
+type PHPVersionsMsg struct {
+    Versions []VersionInfo
+}
+
+// Result message (error)
+type PHPVersionsErrMsg struct {
+    Err error
+}
+
+// Component messages
+type FormSubmitMsg struct {
+    Values map[string]string
 }
 ```
 
@@ -200,12 +216,78 @@ type NavigateMsg struct {
 ```go
 type Screen struct {
     theme *theme.Theme
-    // ... fields
+    form *components.FormModel        // Phase 5: form input
+    spinner *components.SpinnerModel  // Phase 6: loading
+    confirm *components.ConfirmModel  // Phase 6: destructive actions
+    // ... other fields
 }
 
 func (s *Screen) Init() tea.Cmd { return nil }
 func (s *Screen) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /* ... */ }
 func (s *Screen) View() string { /* ... */ }
+```
+
+### Form Pattern (Phase 5)
+```go
+// Show form on key
+case "i":  // install action
+    fields := []components.FormField{
+        {Key: "version", Label: "PHP Version", Type: components.FieldSelect,
+         Options: versions, Default: versions[0]},
+    }
+    s.form = components.NewForm(s.theme, "Install PHP", fields)
+    s.formActive = true
+
+// Handle form submission
+case components.FormSubmitMsg:
+    s.formActive = false
+    version := v.Values["version"]
+    s.spinner.Start("Installing...")
+    return s, func() tea.Msg {
+        return InstallPHPMsg{Version: version}
+    }
+```
+
+### Spinner Pattern (Phase 6)
+```go
+// Start spinner
+spinCmd := s.spinner.Start("Installing PHP 8.3...")
+actionCmd := func() tea.Msg { return InstallPHPMsg{...} }
+return s, tea.Batch(spinCmd, actionCmd)
+
+// Stop spinner (app-level)
+case PHPVersionsMsg:
+    a.phpScreen.StopSpinner()
+    a.phpScreen.SetVersions(msg.Versions)
+```
+
+### Confirmation Pattern (Phase 6)
+```go
+// Show confirmation
+case "r":
+    s.confirm.Show("Remove PHP 8.2? Sites using it will break.")
+    s.pendingAction = "remove"
+    s.pendingTarget = version
+
+// Handle confirmation result
+case components.ConfirmYesMsg:
+    return s, func() tea.Msg {
+        return RemovePHPMsg{Version: s.pendingTarget}
+    }
+case components.ConfirmNoMsg:
+    s.pendingAction = ""
+```
+
+### Toast Pattern (Phase 6 - App level)
+```go
+// In app.go
+case DBOpDoneMsg:
+    cmd := a.toast.Show(components.ToastSuccess, "Database created")
+    return a, tea.Batch(cmd, a.fetchDatabases())
+
+case DBOpErrMsg:
+    cmd := a.toast.Show(components.ToastError, msg.Err.Error())
+    return a, cmd
 ```
 
 ### Screen Routing
@@ -215,6 +297,20 @@ case screens.NavigateMsg:
     if screen, ok := screenNames[msg.Screen]; ok {
         a.current = screen
     }
+```
+
+### Key Priority Order (Phases 5-6)
+Screens must check component states in priority order:
+```go
+if s.form.Active() {
+    // Form has priority - intercept all keys
+} else if s.confirm.Active() {
+    // Confirmation dialog active
+} else if s.spinner.Active() {
+    // Spinner running - only forward tick messages
+} else {
+    // Normal key handling for screen
+}
 ```
 
 ## Configuration
