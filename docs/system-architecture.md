@@ -74,6 +74,8 @@ juiscript version      → Print version
 **internal/tui/components/** (Reusable Parts)
 - `header.go`: App title and current screen name
 - `statusbar.go`: Keyboard shortcuts at bottom
+- `form.go` (Phase 6): Generic step-by-step form component (FieldText, FieldSelect, FieldConfirm)
+- `service-status-bar.go`: Horizontal health indicator for LEMP services (Phase 01)
 - `theme.go`: Centralized colors and styles (Lip Gloss)
 
 ### Layer 3: System Abstractions

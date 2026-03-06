@@ -187,6 +187,37 @@ Config
 - Layout: "Key: Description" format
 - Right-aligned at bottom
 
+### internal/tui/components/form.go (285 lines) - Phase 6 (TUI Input Forms)
+**Purpose**: Reusable generic form component for step-by-step data collection
+- Generic FormModel embeds in screens; screens toggle formActive to show/hide
+- Step-by-step field progression: current → confirm → submit/cancel
+- Three field types: FieldText (freeform input), FieldSelect (dropdown), FieldConfirm (yes/no)
+
+**Key Types**:
+- `FormField`: Title, label, type, options, default value, optional validator
+- `FormModel`: Title, fields[], step counter, values map, input buffer, selectIdx/confirmOn maps
+- `FormSubmitMsg`: Carries completed form values back to parent screen
+- `FormCancelMsg`: Signals user cancelled form via Esc key
+
+**Field Lifecycle**:
+1. FieldText: Text input with backspace/char append; validation on Enter; shows placeholder + cursor
+2. FieldSelect: Tab/shift-tab/j/k cycles options; wraps around; Enter confirms selection
+3. FieldConfirm: Tab/j/k toggles yes/no; Enter confirms boolean state
+4. Final step: Shows "Press Enter to confirm, Esc to cancel" summary prompt
+5. Returns FormSubmitMsg(Values) on Enter at confirm step or FormCancelMsg on Esc
+
+**Key Methods**:
+- NewForm(t *Theme, title string, fields []FormField): Constructor with defaults applied
+- Active() bool: Returns true if form in progress (not submitted/cancelled)
+- Values() map[string]string: Returns copy of confirmed values
+- Reset(): Clears all state for reuse, re-applies defaults
+- Update(tea.Msg) (*FormModel, tea.Cmd): Handles key input, validates, returns messages
+- View() string: Renders form state (title, current+prior fields, error, help text)
+
+**Validation Pattern**: FormField.Validate is optional func(string)error. On validation error, form stays on current field with error displayed; step does not advance until valid.
+
+**13 Unit Tests** (form_test.go): TextInput, Backspace, SelectCycle, SelectCycleBackward, ConfirmToggle, ValidationError, Submit, Cancel, Reset, Active, View, DefaultValues, ConfirmFieldSubmit
+
 ### internal/tui/components/service-status-bar.go (128 lines) - Phase 01
 **Purpose**: Horizontal health indicator bar for LEMP services
 - Renders one-line service overview (green dot=active, red dot=failed, hollow=inactive)
