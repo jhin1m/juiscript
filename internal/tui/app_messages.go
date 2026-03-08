@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/jhin1m/juiscript/internal/backup"
 	"github.com/jhin1m/juiscript/internal/database"
+	"github.com/jhin1m/juiscript/internal/firewall"
 	"github.com/jhin1m/juiscript/internal/nginx"
 	"github.com/jhin1m/juiscript/internal/site"
 	"github.com/jhin1m/juiscript/internal/ssl"
@@ -110,3 +111,20 @@ type BackupOpDoneMsg struct{}
 
 // BackupOpErrMsg reports a failed backup operation.
 type BackupOpErrMsg struct{ Err error }
+
+// -- Firewall result messages --
+
+// FirewallStatusMsg delivers UFW + Fail2ban status.
+type FirewallStatusMsg struct {
+	UFW   *firewall.UFWStatus
+	Jails []firewall.F2bJailStatus
+}
+
+// FirewallStatusErrMsg reports failure to fetch firewall status.
+type FirewallStatusErrMsg struct{ Err error }
+
+// FirewallOpDoneMsg signals a firewall operation succeeded.
+type FirewallOpDoneMsg struct{}
+
+// FirewallOpErrMsg reports a failed firewall operation.
+type FirewallOpErrMsg struct{ Err error }

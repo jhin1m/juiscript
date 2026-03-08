@@ -10,6 +10,7 @@ import (
 	"github.com/jhin1m/juiscript/internal/backup"
 	"github.com/jhin1m/juiscript/internal/config"
 	"github.com/jhin1m/juiscript/internal/database"
+	"github.com/jhin1m/juiscript/internal/firewall"
 	"github.com/jhin1m/juiscript/internal/nginx"
 	"github.com/jhin1m/juiscript/internal/php"
 	"github.com/jhin1m/juiscript/internal/provisioner"
@@ -41,7 +42,8 @@ type Managers struct {
 	Service *service.Manager
 	PHP     *php.Manager
 	Nginx   *nginx.Manager
-	Prov    *provisioner.Provisioner
+	Prov     *provisioner.Provisioner
+	Firewall *firewall.Manager
 }
 
 // initManagers creates logger, loads config, and constructs all backend managers.
@@ -84,6 +86,7 @@ func initManagers() (*Managers, error) {
 	sslMgr := ssl.NewManager(exec, nginxMgr, fileMgr)
 	supervisorMgr := supervisor.NewManager(exec, fileMgr, tplEngine)
 	backupMgr := backup.NewManager(cfg, exec, fileMgr, dbMgr)
+	firewallMgr := firewall.NewManager(exec)
 
 	return &Managers{
 		Cfg:     cfg,
@@ -96,7 +99,8 @@ func initManagers() (*Managers, error) {
 		Service: svcMgr,
 		PHP:     phpMgr,
 		Nginx:   nginxMgr,
-		Prov:    prov,
+		Prov:     prov,
+		Firewall: firewallMgr,
 	}, nil
 }
 
@@ -138,6 +142,7 @@ func main() {
 	rootCmd.AddCommand(phpCmd(mgrs))
 	rootCmd.AddCommand(backupCmd(mgrs))
 	rootCmd.AddCommand(queueCmd(mgrs))
+	rootCmd.AddCommand(firewallCmd(mgrs))
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -155,7 +160,8 @@ func runTUI(mgrs *Managers) error {
 		DBMgr:     mgrs.DB,
 		SSLMgr:    mgrs.SSL,
 		SuperMgr:  mgrs.Super,
-		BackupMgr: mgrs.Backup,
+		BackupMgr:   mgrs.Backup,
+		FirewallMgr: mgrs.Firewall,
 	})
 
 	p := tea.NewProgram(app, tea.WithAltScreen())

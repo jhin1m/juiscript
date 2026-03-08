@@ -37,7 +37,8 @@ func NewDashboard(t *theme.Theme) *Dashboard {
 			{Title: "Services", Desc: "Start/stop/restart services", Key: "6"},
 			{Title: "Queues", Desc: "Supervisor queue workers", Key: "7"},
 			{Title: "Backup", Desc: "Backup and restore sites", Key: "8"},
-			{Title: "Setup", Desc: "Install missing packages", Key: "9"},
+			{Title: "Firewall", Desc: "UFW rules and IP blocking", Key: "9"},
+			{Title: "Setup", Desc: "Install missing packages", Key: "0"},
 		},
 	}
 }
@@ -73,6 +74,14 @@ func (d *Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return NavigateMsg{Screen: d.items[idx].Title}
 				}
 			}
+		case "0":
+			// "0" maps to the last item (Setup)
+			lastIdx := len(d.items) - 1
+			if lastIdx >= 0 {
+				return d, func() tea.Msg {
+					return NavigateMsg{Screen: d.items[lastIdx].Title}
+				}
+			}
 		}
 	}
 
@@ -89,7 +98,7 @@ func (d *Dashboard) View() string {
 	var banner string
 	if d.missingCount > 0 {
 		banner = d.theme.WarnText.Render(
-			fmt.Sprintf("  ⚠ %d package(s) not installed — press '9' for Setup", d.missingCount)) + "\n"
+			fmt.Sprintf("  ⚠ %d package(s) not installed — press '0' for Setup", d.missingCount)) + "\n"
 	}
 
 	// Menu items

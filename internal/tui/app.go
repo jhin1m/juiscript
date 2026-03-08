@@ -8,6 +8,7 @@ import (
 	"github.com/jhin1m/juiscript/internal/backup"
 	"github.com/jhin1m/juiscript/internal/config"
 	"github.com/jhin1m/juiscript/internal/database"
+	"github.com/jhin1m/juiscript/internal/firewall"
 	"github.com/jhin1m/juiscript/internal/nginx"
 	"github.com/jhin1m/juiscript/internal/php"
 	"github.com/jhin1m/juiscript/internal/provisioner"
@@ -67,6 +68,7 @@ const (
 	ScreenServices
 	ScreenQueues
 	ScreenBackup
+	ScreenFirewall
 	ScreenSetup
 )
 
@@ -80,6 +82,7 @@ var screenNames = map[string]Screen{
 	"Services": ScreenServices,
 	"Queues":   ScreenQueues,
 	"Backup":   ScreenBackup,
+	"Firewall": ScreenFirewall,
 	"Setup":    ScreenSetup,
 }
 
@@ -94,7 +97,8 @@ type AppDeps struct {
 	DBMgr     *database.Manager
 	SSLMgr    *ssl.Manager
 	SuperMgr  *supervisor.Manager
-	BackupMgr *backup.Manager
+	BackupMgr   *backup.Manager
+	FirewallMgr *firewall.Manager
 }
 
 // App is the root Bubble Tea model.
@@ -114,6 +118,7 @@ type App struct {
 	sslMgr        *ssl.Manager
 	supervisorMgr *supervisor.Manager
 	backupMgr     *backup.Manager
+	firewallMgr   *firewall.Manager
 	current     Screen
 	previous    Screen // for back navigation from sub-screens
 	dashboard   *screens.Dashboard
@@ -127,6 +132,7 @@ type App struct {
 	queuesScreen     *screens.QueuesScreen
 	sslScreen        *screens.SSLScreen
 	backupScreen     *screens.BackupScreen
+	firewallScreen   *screens.FirewallScreen
 	setupScreen      *screens.SetupScreen
 	toast            *components.ToastModel
 	setupProgressCh  chan provisioner.ProgressEvent // nil when not installing
@@ -158,6 +164,7 @@ func NewApp(cfg *config.Config, deps AppDeps) *App {
 		sslMgr:        deps.SSLMgr,
 		supervisorMgr: deps.SuperMgr,
 		backupMgr:     deps.BackupMgr,
+		firewallMgr:   deps.FirewallMgr,
 		toast:       components.NewToast(t),
 		current:     ScreenDashboard,
 		dashboard:   screens.NewDashboard(t),
@@ -171,6 +178,7 @@ func NewApp(cfg *config.Config, deps AppDeps) *App {
 		queuesScreen:   screens.NewQueuesScreen(t),
 		sslScreen:      screens.NewSSLScreen(t),
 		backupScreen:   screens.NewBackupScreen(t),
+		firewallScreen: screens.NewFirewallScreen(t),
 		setupScreen:    screens.NewSetupScreen(t),
 	}
 }
@@ -208,6 +216,24 @@ func (a *App) fetchPHPVersions() tea.Cmd {
 			return PHPVersionsErrMsg{Err: err}
 		}
 		return PHPVersionsMsg{Versions: versions}
+	}
+}
+
+// fetchFirewallStatus returns a tea.Cmd that fetches UFW + Fail2ban status asynchronously.
+func (a *App) fetchFirewallStatus() tea.Cmd {
+	if a.firewallMgr == nil {
+		return func() tea.Msg {
+			return FirewallStatusErrMsg{Err: fmt.Errorf("firewall manager not available")}
+		}
+	}
+	return func() tea.Msg {
+		ctx := context.Background()
+		ufwStatus, ufwErr := a.firewallMgr.Status(ctx)
+		jails, _ := a.firewallMgr.F2bStatus(ctx) // non-fatal if fail2ban missing
+		if ufwErr != nil {
+			return FirewallStatusErrMsg{Err: ufwErr}
+		}
+		return FirewallStatusMsg{UFW: ufwStatus, Jails: jails}
 	}
 }
 
@@ -333,6 +359,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, a.fetchWorkers())
 		case ScreenBackup:
 			cmds = append(cmds, a.fetchBackups(""))
+		case ScreenFirewall:
+			cmds = append(cmds, a.fetchFirewallStatus())
 		}
 		return a, tea.Batch(cmds...)
 
@@ -469,6 +497,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.DeleteWorkerMsg:
 		return a, a.handleDeleteWorker(msg.Name)
 
+	// Firewall screen messages
+	case screens.OpenPortMsg:
+		return a, a.handleOpenPort(msg.Port, msg.Protocol)
+	case screens.ClosePortMsg:
+		return a, a.handleClosePort(msg.Port, msg.Protocol)
+	case screens.DeleteUFWRuleMsg:
+		return a, a.handleDeleteUFWRule(msg.RuleNum)
+	case screens.BanIPMsg:
+		return a, a.handleBanIP(msg.IP, msg.Jail)
+	case screens.UnbanIPMsg:
+		return a, a.handleUnbanIP(msg.IP, msg.Jail)
+
 	// Backup screen messages — operations run in background
 	case screens.CreateBackupMsg:
 		toastCmd := a.toast.Show(components.ToastWarning, "Creating backup for "+msg.Domain+"... (running in background)")
@@ -581,6 +621,22 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
 		return a, toastCmd
 
+	// Firewall results
+	case FirewallStatusMsg:
+		a.firewallScreen.SetUFWStatus(msg.UFW)
+		a.firewallScreen.SetJails(msg.Jails)
+		return a, nil
+	case FirewallStatusErrMsg:
+		a.firewallScreen.SetError(msg.Err)
+		return a, nil
+	case FirewallOpDoneMsg:
+		toastCmd := a.toast.Show(components.ToastSuccess, "Firewall operation completed")
+		return a, tea.Batch(toastCmd, a.fetchFirewallStatus())
+	case FirewallOpErrMsg:
+		a.firewallScreen.SetError(msg.Err)
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
+
 	// Backup results
 	case BackupListMsg:
 		a.backupScreen.StopSpinner()
@@ -661,6 +717,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.backupScreen.Update(msg)
 		a.backupScreen = updated.(*screens.BackupScreen)
 		return cmd
+	case ScreenFirewall:
+		updated, cmd := a.firewallScreen.Update(msg)
+		a.firewallScreen = updated.(*screens.FirewallScreen)
+		return cmd
 	case ScreenSetup:
 		updated, cmd := a.setupScreen.Update(msg)
 		a.setupScreen = updated.(*screens.SetupScreen)
@@ -697,6 +757,8 @@ func (a *App) View() string {
 		content = a.queuesScreen.View()
 	case ScreenBackup:
 		content = a.backupScreen.View()
+	case ScreenFirewall:
+		content = a.firewallScreen.View()
 	case ScreenSetup:
 		content = a.setupScreen.View()
 	default:
@@ -747,7 +809,7 @@ func (a *App) currentBindings() []components.KeyBinding {
 		return append([]components.KeyBinding{
 			{Key: "j/k", Desc: "navigate"},
 			{Key: "enter", Desc: "select"},
-			{Key: "1-9", Desc: "jump to"},
+			{Key: "0-9", Desc: "jump to"},
 			{Key: "q", Desc: "quit"},
 		}, base...)
 	case ScreenSiteCreate:
@@ -805,6 +867,14 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "c", Desc: "create"},
 			{Key: "r", Desc: "restore"},
 			{Key: "d", Desc: "delete"},
+			{Key: "esc", Desc: "back"},
+		}, base...)
+	case ScreenFirewall:
+		return append([]components.KeyBinding{
+			{Key: "j/k", Desc: "navigate"},
+			{Key: "tab", Desc: "switch tab"},
+			{Key: "o/c/d", Desc: "open/close/delete"},
+			{Key: "b/u", Desc: "block/unblock"},
 			{Key: "esc", Desc: "back"},
 		}, base...)
 	case ScreenSetup:
