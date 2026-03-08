@@ -19,10 +19,10 @@ Add UFW firewall rule management and Fail2ban IP blocking with full CLI + TUI su
 
 | Phase | File | Description | Effort | Status |
 |-------|------|-------------|--------|--------|
-| 1 | [phase-01-backend-manager.md](phase-01-backend-manager.md) | `internal/firewall/manager.go` + tests | 2h | pending |
-| 2 | [phase-02-cli-commands.md](phase-02-cli-commands.md) | `cmd/juiscript/cmd-firewall.go` | 1h | pending |
-| 3 | [phase-03-tui-screen.md](phase-03-tui-screen.md) | `internal/tui/screens/firewall.go` | 2h | pending |
-| 4 | [phase-04-integration-wiring.md](phase-04-integration-wiring.md) | Wire into main.go, app.go, messages, handlers | 1h | pending |
+| 1 | [phase-01-backend-manager.md](phase-01-backend-manager.md) | `internal/firewall/manager.go` + tests | 2h | done |
+| 2 | [phase-02-cli-commands.md](phase-02-cli-commands.md) | `cmd/juiscript/cmd-firewall.go` | 1h | done |
+| 3 | [phase-03-tui-screen.md](phase-03-tui-screen.md) | `internal/tui/screens/firewall.go` | 2h | done |
+| 4 | [phase-04-integration-wiring.md](phase-04-integration-wiring.md) | Wire into main.go, app.go, messages, handlers | 1h | done |
 
 ## Dependencies
 

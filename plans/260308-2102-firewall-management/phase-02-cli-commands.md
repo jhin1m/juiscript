@@ -13,7 +13,7 @@
 | Date | 2026-03-08 |
 | Priority | P1 |
 | Effort | 1h |
-| Status | pending |
+| Status | done |
 
 Create `cmd/juiscript/cmd-firewall.go` with Cobra subcommands. Follows `cmd-service.go` pattern: command group + subcommands, flags, table output.
 

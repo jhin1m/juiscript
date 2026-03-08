@@ -13,7 +13,7 @@
 | Date | 2026-03-08 |
 | Priority | P1 |
 | Effort | 2h |
-| Status | pending |
+| Status | done |
 
 Create `internal/firewall/manager.go` with UFW + Fail2ban operations. Follows `internal/service/manager.go` pattern: struct with Executor dependency, input validation, output parsing.
 

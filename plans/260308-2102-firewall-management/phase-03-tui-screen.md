@@ -13,7 +13,7 @@
 | Date | 2026-03-08 |
 | Priority | P1 |
 | Effort | 2h |
-| Status | pending |
+| Status | done |
 
 Create `internal/tui/screens/firewall.go` with two-tab layout: UFW Rules and Blocked IPs. Follows `screens/services.go` pattern for struct, SetData, Update/View. Uses form/confirm/toast components from existing library.
 

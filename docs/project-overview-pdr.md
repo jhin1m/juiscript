@@ -54,6 +54,12 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
 - Service status monitoring
 - Systemd integration
 
+### Firewall Management
+- UFW (Uncomplicated Firewall) rule management
+- Open/close ports with protocol selection (TCP/UDP)
+- Fail2ban IP blocking integration for brute-force protection
+- View and manage blocked IPs by jail
+
 ## Non-Functional Requirements
 
 ### Architecture
@@ -110,6 +116,9 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
 - [x] SSL certificate automation
 - [x] Backup scheduling and execution
 - [x] Supervisor queue worker management
+- [x] UFW firewall rule management (open/close ports)
+- [x] Fail2ban IP blocking integration
+- [x] TUI firewall management screen
 
 ### Quality Standards
 - Unit test coverage > 70%
@@ -191,6 +200,15 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
     - Spinners: loading indicators for long operations (PHP install, backup create/restore, SSL obtain)
     - Confirmations: modal dialogs for destructive actions (remove, drop, delete, revoke)
     - Complete operation flow: form → validation → spinner → result toast → refresh
+
+- **Phase 10** (Complete): Firewall Management
+  - UFW rule management (open/close ports with TCP/UDP protocol selection)
+  - Fail2ban IP blocking integration for brute-force protection
+  - Rule deletion by number
+  - Jail status with blocked IP lists
+  - Dual-tab TUI screen: UFW rules + blocked IPs table view
+  - CLI subcommands for firewall operations
+  - Port range validation (1-65535), IP format validation
 
 ## Dependencies
 

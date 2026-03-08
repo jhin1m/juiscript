@@ -13,7 +13,7 @@
 | Date | 2026-03-08 |
 | Priority | P1 |
 | Effort | 1h |
-| Status | pending |
+| Status | done |
 
 Wire firewall manager into main.go (Managers struct, initManagers), app.go (AppDeps, screen enum, routing, View), app_messages.go (result messages), app_handlers_firewall.go (handler methods), and dashboard menu.
 

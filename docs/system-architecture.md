@@ -39,7 +39,7 @@ juiscript version      → Print version
 
 **internal/tui/app.go** (Root Model - Phase 1: Backend Wiring)
 - Screen router for TUI with injected backend managers
-- AppDeps struct: Encapsulates all 9 backend managers for dependency injection
+- AppDeps struct: Encapsulates all 10 backend managers for dependency injection
 - All managers are optional (nil-safe) for graceful degradation
 - App struct fields:
   - `svcMgr` (service.Manager): Service control
@@ -51,6 +51,7 @@ juiscript version      → Print version
   - `sslMgr` (ssl.Manager): SSL certificate management
   - `supervisorMgr` (supervisor.Manager): Queue worker management
   - `backupMgr` (backup.Manager): Backup/restore operations
+  - `firewallMgr` (firewall.Manager): Firewall & IP blocking
 - NewApp(cfg, AppDeps) constructor for clean initialization
 - Keyboard navigation: 'j'/'k' move, 'enter' select, 'q' quit
 - Screen transitions via NavigateMsg/GoBackMsg
@@ -68,11 +69,12 @@ juiscript version      → Print version
 - Pattern: Each operation has success (msg) and failure (errMsg) variants
 
 **internal/tui/screens/** (Full-Screen Views - Phase 5-6: Forms + Feedback Complete)
-- `dashboard.go`: Main menu with 8 feature links
+- `dashboard.go`: Main menu with 9 feature links
 - `php.go`: Version list with install/remove forms, spinner for install, confirmation for remove
 - `database.go`: DB list with create/import forms, confirmation for drop
 - `ssl.go`: Certificate list with obtain form, spinner for certbot, confirmation for revoke
 - `backup.go`: Backup list with create form, spinners for create/restore, confirmation for delete/restore
+- `firewall.go`: Dual-tab UFW rules & blocked IPs with port/IP management forms (Phase 10)
 - `sitedetail.go`: Site details with confirmation for delete
 - All screens implement Bubble Tea Model interface with form/spinner/confirmation integration
 
@@ -279,6 +281,27 @@ Three core interfaces for testability (no root in tests):
    - Retention policy with cleanup automation
    - Cron-based scheduled backups
    - Security: path traversal prevention, domain validation, restrictive permissions
+
+10. **firewall/** (Phase 10 - Complete)
+   ```go
+   Manager {
+     Status(ctx) → (*UFWStatus, error)                    // List UFW rules
+     Enable(ctx) error                                    // Enable UFW
+     Disable(ctx) error                                   // Disable UFW
+     AllowPort(ctx, port int, proto string) error         // Open port in UFW
+     DenyPort(ctx, port int, proto string) error          // Close port in UFW
+     DeleteRule(ctx, ruleNum int) error                   // Remove UFW rule by number
+     BanIP(ctx, ip, jail string) error                    // Block IP in Fail2ban
+     UnbanIP(ctx, ip, jail string) error                  // Unblock IP from Fail2ban
+     ListJailStats(ctx) ([]F2bJailStatus, error)         // Blocked IPs by jail
+   }
+   ```
+   - UFW (Uncomplicated Firewall) rule management with port/protocol support
+   - Fail2ban integration for automatic IP blocking against brute-force attacks
+   - Input validation: IP format, port range (1-65535), protocol (tcp/udp/both)
+   - Rule parsing from `ufw status numbered` output (rule number, port, action, source)
+   - Jail management for fail2ban: sshd, nginx-http-auth, etc.
+   - TUI dual-tab screen: UFW rules + blocked IPs list
 
 ## Data Flow
 

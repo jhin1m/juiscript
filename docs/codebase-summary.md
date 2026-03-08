@@ -12,7 +12,8 @@ juiscript/
 │   ├── cmd-ssl.go              # ssl {list,obtain,revoke,renew}
 │   ├── cmd-service.go          # service {start,stop,restart,reload,status,list}
 │   ├── cmd-backup.go           # backup {list,create,restore,delete,cleanup,cron-setup,cron-remove}
-│   └── cmd-queue.go            # queue {list,create,delete,start,stop,restart,status}
+│   ├── cmd-queue.go            # queue {list,create,delete,start,stop,restart,status}
+│   └── cmd-firewall.go         # firewall {status,open-port,close-port,ban-ip,unban-ip,list-blocked}
 ├── internal/
 │   ├── config/
 │   │   ├── config.go           # TOML config struct, Load/Save, defaults
@@ -56,6 +57,9 @@ juiscript/
 │   │   ├── detector_test.go    # 8 unit tests
 │   │   ├── installer.go        # Package installation (Phase 02, 196 lines)
 │   │   └── installer_test.go   # 12 unit tests
+│   ├── firewall/
+│   │   ├── manager.go          # UFW rules + Fail2ban IP blocking
+│   │   └── manager_test.go
 │   └── tui/
 │       ├── app.go              # Root model & screen router (Phase 1: AppDeps injection)
 │       ├── app_messages.go     # Result message types for async operations (Phase 1)
@@ -71,7 +75,8 @@ juiscript/
 │           ├── database.go     # Database management screen
 │           ├── queues.go       # Queue worker management screen (Phase 08)
 │           ├── services.go     # Service control screen
-│           └── backup.go       # Backup/restore management screen (Phase 09)
+│           ├── backup.go       # Backup/restore management screen (Phase 09)
+│           └── firewall.go     # Firewall rules & IP blocking screen (Phase 10)
 ├── templates/
 │   ├── nginx-laravel.conf.tmpl     # Laravel vhost template
 │   ├── nginx-wordpress.conf.tmpl   # WordPress vhost template
@@ -1024,6 +1029,62 @@ PackageInfo {
 **Addition**: WarnText style for warning states (amber color)
 - Used by QueuesScreen for STOPPED worker display
 - Consistent with existing theme palette
+
+## Firewall Management Implementation (Phase 10)
+
+### internal/firewall/manager.go
+
+**UFW & Fail2ban Manager**:
+```go
+Manager {
+  Status(ctx) → (*UFWStatus, error)        // List rules and active state
+  Enable(ctx) error                        // Enable UFW
+  Disable(ctx) error                       // Disable UFW
+  AllowPort(ctx, port int, proto string) error  // Open port
+  DenyPort(ctx, port int, proto string) error   // Close port
+  DeleteRule(ctx, ruleNum int) error      // Remove rule by number
+  BanIP(ctx, ip, jail string) error       // Block IP in Fail2ban
+  UnbanIP(ctx, ip, jail string) error     // Unblock IP
+  ListJailStats(ctx) ([]F2bJailStatus, error) // Blocked IPs per jail
+}
+```
+
+**Data Structures**:
+- `UFWRule`: Rule number, port/protocol, action (ALLOW/DENY), source
+- `UFWStatus`: Active state + rules list
+- `F2bJailStatus`: Jail name + banned IP list + count
+
+**Validation**: IP format, port range (1-65535), protocol (tcp/udp/both)
+
+**Parser Functions**:
+- `parseUFWStatus()`: Parse `ufw status numbered` output
+- `parseF2bStats()`: Parse `fail2ban-client status` + jail info
+
+### cmd/juiscript/cmd-firewall.go
+
+**CLI Subcommands**:
+- `firewall status`: Show active rules + blocked IPs
+- `firewall open-port --port 8080 --protocol tcp`: Allow port
+- `firewall close-port --port 8080`: Deny port
+- `firewall ban-ip --ip 192.168.1.1 --jail sshd`: Block IP
+- `firewall unban-ip --ip 192.168.1.1 --jail sshd`: Unblock IP
+- `firewall list-blocked`: Show all banned IPs by jail
+
+### internal/tui/screens/firewall.go (Phase 10)
+
+**FirewallScreen**: Dual-tab interface
+- **Tab 0 - UFW Rules**: Table of numbered rules with port/action/source
+- **Tab 1 - Blocked IPs**: Table of jails with banned IP counts + list
+- Keyboard: Tab for tab switch, 'o' to open port, 'c' to close, 'b' to ban IP, 'u' to unban
+- Form inputs for port, IP, jail name
+- Messages: OpenPortMsg, ClosePortMsg, DeleteUFWRuleMsg, BanIPMsg, UnbanIPMsg
+
+### Dashboard Integration
+
+**Dashboard.go (UPDATED)**:
+- Firewall menu link added to main dashboard
+- Key '4' navigates to Firewall screen
+- Setup moved to key '0'
 
 ## Future Additions
 
