@@ -29,38 +29,34 @@ var (
 	commit  = "none"
 )
 
-func main() {
-	rootCmd := &cobra.Command{
-		Use:   "juiscript",
-		Short: "LEMP server management TUI",
-		Long:  "juiscript - Manage Nginx, PHP-FPM, MariaDB, Redis on Ubuntu with a beautiful TUI",
-		// Default action: launch TUI
-		RunE: runTUI,
-	}
-
-	rootCmd.AddCommand(versionCmd())
-
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+// Managers holds all backend managers shared between TUI and CLI commands.
+type Managers struct {
+	Cfg     *config.Config
+	Logger  *slog.Logger
+	Site    *site.Manager
+	DB      *database.Manager
+	SSL     *ssl.Manager
+	Backup  *backup.Manager
+	Super   *supervisor.Manager
+	Service *service.Manager
+	PHP     *php.Manager
+	Nginx   *nginx.Manager
+	Prov    *provisioner.Provisioner
 }
 
-// runTUI launches the Bubble Tea TUI application.
-func runTUI(cmd *cobra.Command, args []string) error {
+// initManagers creates logger, loads config, and constructs all backend managers.
+func initManagers() (*Managers, error) {
 	// Write logs to file instead of terminal to avoid breaking TUI display.
-	// Logs go to /var/log/juiscript.log for debugging, not stdout/stderr.
 	logFile, err := os.OpenFile("/var/log/juiscript.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		// Fallback: discard logs if we can't open log file (e.g. no permission)
 		logFile = nil
 	}
 
 	var logger *slog.Logger
 	if logFile != nil {
-		defer logFile.Close()
+		// Note: logFile is not closed here — it stays open for the process lifetime.
 		logger = slog.New(slog.NewTextHandler(logFile, nil))
 	} else {
-		// Discard logs silently when log file isn't available
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
@@ -73,15 +69,15 @@ func runTUI(cmd *cobra.Command, args []string) error {
 
 	exec := system.NewExecutor(logger)
 	fileMgr := system.NewFileManager()
-	tplEngine, _ := template.New() // template engine for PHP-FPM pool configs
+	tplEngine, err := template.New()
+	if err != nil {
+		return nil, fmt.Errorf("load templates: %w", err)
+	}
 	userMgr := system.NewUserManager(exec)
 
-	// Core managers (already existed)
 	phpMgr := php.NewManager(exec, fileMgr, tplEngine)
 	svcMgr := service.NewManager(exec)
 	prov := provisioner.NewProvisioner(exec, phpMgr)
-
-	// Domain managers (newly wired)
 	nginxMgr := nginx.NewManager(exec, fileMgr, tplEngine, cfg.Nginx.SitesAvailable, cfg.Nginx.SitesEnabled)
 	dbMgr := database.NewManager(exec)
 	siteMgr := site.NewManager(cfg, exec, fileMgr, userMgr, tplEngine)
@@ -89,26 +85,83 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	supervisorMgr := supervisor.NewManager(exec, fileMgr, tplEngine)
 	backupMgr := backup.NewManager(cfg, exec, fileMgr, dbMgr)
 
-	app := tui.NewApp(cfg, tui.AppDeps{
-		SvcMgr:    svcMgr,
-		Prov:      prov,
-		PHPMgr:    phpMgr,
-		SiteMgr:   siteMgr,
-		NginxMgr:  nginxMgr,
-		DBMgr:     dbMgr,
-		SSLMgr:    sslMgr,
-		SuperMgr:  supervisorMgr,
-		BackupMgr: backupMgr,
+	return &Managers{
+		Cfg:     cfg,
+		Logger:  logger,
+		Site:    siteMgr,
+		DB:      dbMgr,
+		SSL:     sslMgr,
+		Backup:  backupMgr,
+		Super:   supervisorMgr,
+		Service: svcMgr,
+		PHP:     phpMgr,
+		Nginx:   nginxMgr,
+		Prov:    prov,
+	}, nil
+}
+
+func main() {
+	// Init managers once — shared between TUI and all CLI subcommands.
+	mgrs, err := initManagers()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	rootCmd := &cobra.Command{
+		Use:   "juiscript",
+		Short: "LEMP server management CLI & TUI",
+		Long:  "juiscript - Manage Nginx, PHP-FPM, MariaDB, Redis on Ubuntu",
+		// Default action: launch TUI when no subcommand given
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTUI(mgrs)
+		},
+	}
+
+	// Root check: require root for all commands except "version"
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.CommandPath() == "juiscript version" {
+			return nil
+		}
+		if os.Geteuid() != 0 {
+			return fmt.Errorf("juiscript requires root privileges, run with sudo")
+		}
+		return nil
+	}
+
+	// Register all command groups
+	rootCmd.AddCommand(versionCmd())
+	rootCmd.AddCommand(siteCmd(mgrs))
+	rootCmd.AddCommand(dbCmd(mgrs))
+	rootCmd.AddCommand(sslCmd(mgrs))
+	rootCmd.AddCommand(serviceCmd(mgrs))
+	rootCmd.AddCommand(phpCmd(mgrs))
+	rootCmd.AddCommand(backupCmd(mgrs))
+	rootCmd.AddCommand(queueCmd(mgrs))
+
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+// runTUI launches the Bubble Tea TUI application.
+func runTUI(mgrs *Managers) error {
+	app := tui.NewApp(mgrs.Cfg, tui.AppDeps{
+		SvcMgr:    mgrs.Service,
+		Prov:      mgrs.Prov,
+		PHPMgr:    mgrs.PHP,
+		SiteMgr:   mgrs.Site,
+		NginxMgr:  mgrs.Nginx,
+		DBMgr:     mgrs.DB,
+		SSLMgr:    mgrs.SSL,
+		SuperMgr:  mgrs.Super,
+		BackupMgr: mgrs.Backup,
 	})
 
-	// tea.WithAltScreen uses the alternate terminal buffer
-	// so the TUI doesn't mess up your terminal history
 	p := tea.NewProgram(app, tea.WithAltScreen())
-
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}
-
 	return nil
 }
 
