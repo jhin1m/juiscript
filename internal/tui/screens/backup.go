@@ -27,15 +27,12 @@ type BackupScreen struct {
 	pendingAction string // "delete" or "restore"
 	pendingTarget string // path for delete/restore
 	pendingDomain string // domain for restore
-	// Spinner for create/restore
-	spinner *components.SpinnerModel
 }
 
 func NewBackupScreen(t *theme.Theme) *BackupScreen {
 	return &BackupScreen{
 		theme:   t,
 		confirm: components.NewConfirm(t),
-		spinner: components.NewSpinner(t),
 	}
 }
 
@@ -48,20 +45,12 @@ func (b *BackupScreen) SetError(err error) {
 	b.err = err
 }
 
-// StopSpinner deactivates the spinner (called by App on result).
-func (b *BackupScreen) StopSpinner() {
-	b.spinner.Stop()
-}
+// StopSpinner is a no-op kept for App compatibility.
+func (b *BackupScreen) StopSpinner() {}
 
 func (b *BackupScreen) Init() tea.Cmd { return nil }
 
 func (b *BackupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Spinner ticks
-	if b.spinner.Active() {
-		_, cmd := b.spinner.Update(msg)
-		return b, cmd
-	}
-
 	// Confirm dialog
 	if b.confirm.Active() {
 		_, cmd := b.confirm.Update(msg)
@@ -101,10 +90,10 @@ func (b *BackupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				b.formActive = false
 				domain := v.Values["domain"]
 				backupType := v.Values["type"]
-				spinCmd := b.spinner.Start("Creating backup for " + domain + "...")
-				return b, tea.Batch(spinCmd, func() tea.Msg {
+				// Don't block UI — backup runs in background
+				return b, func() tea.Msg {
 					return CreateBackupMsg{Domain: domain, Type: backupType}
-				})
+				}
 			case components.FormCancelMsg:
 				b.formActive = false
 				return b, nil
@@ -165,10 +154,6 @@ func (b *BackupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (b *BackupScreen) View() string {
 	title := b.theme.Title.Render("Backups")
-
-	if b.spinner.Active() {
-		return lipgloss.JoinVertical(lipgloss.Left, title, "", b.spinner.View())
-	}
 
 	if b.confirm.Active() {
 		return lipgloss.JoinVertical(lipgloss.Left, title, "", b.confirm.View())

@@ -20,7 +20,7 @@ func (a *App) handleInstallPHP(version string) tea.Cmd {
 		if err != nil {
 			return PHPVersionsErrMsg{Err: err}
 		}
-		return PHPVersionsMsg{Versions: versions}
+		return PHPVersionsMsg{Versions: versions, Action: "install"}
 	}
 }
 
@@ -49,6 +49,6 @@ func (a *App) handleRemovePHP(version string) tea.Cmd {
 		if err != nil {
 			return PHPVersionsErrMsg{Err: err}
 		}
-		return PHPVersionsMsg{Versions: versions}
+		return PHPVersionsMsg{Versions: versions, Action: "remove"}
 	}
 }

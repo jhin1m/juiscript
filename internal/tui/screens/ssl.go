@@ -33,15 +33,12 @@ type SSLScreen struct {
 	// Confirm for revoke
 	confirm       *components.ConfirmModel
 	pendingTarget string // domain to revoke
-	// Spinner for obtain
-	spinner *components.SpinnerModel
 }
 
 func NewSSLScreen(t *theme.Theme) *SSLScreen {
 	return &SSLScreen{
 		theme:   t,
 		confirm: components.NewConfirm(t),
-		spinner: components.NewSpinner(t),
 	}
 }
 
@@ -54,20 +51,12 @@ func (s *SSLScreen) SetError(err error) {
 	s.err = err
 }
 
-// StopSpinner deactivates the spinner (called by App on result).
-func (s *SSLScreen) StopSpinner() {
-	s.spinner.Stop()
-}
+// StopSpinner is a no-op kept for App compatibility.
+func (s *SSLScreen) StopSpinner() {}
 
 func (s *SSLScreen) Init() tea.Cmd { return nil }
 
 func (s *SSLScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Spinner ticks
-	if s.spinner.Active() {
-		_, cmd := s.spinner.Update(msg)
-		return s, cmd
-	}
-
 	// Confirm dialog
 	if s.confirm.Active() {
 		_, cmd := s.confirm.Update(msg)
@@ -99,10 +88,10 @@ func (s *SSLScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				s.formActive = false
 				domain := v.Values["domain"]
 				email := v.Values["email"]
-				spinCmd := s.spinner.Start("Obtaining certificate for " + domain + "...")
-				return s, tea.Batch(spinCmd, func() tea.Msg {
+				// Don't block UI — obtain runs in background
+				return s, func() tea.Msg {
 					return ObtainCertMsg{Domain: domain, Email: email}
-				})
+				}
 			case components.FormCancelMsg:
 				s.formActive = false
 				return s, nil
@@ -158,10 +147,6 @@ func (s *SSLScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (s *SSLScreen) View() string {
 	title := s.theme.Title.Render("SSL Certificates")
-
-	if s.spinner.Active() {
-		return lipgloss.JoinVertical(lipgloss.Left, title, "", s.spinner.View())
-	}
 
 	if s.confirm.Active() {
 		return lipgloss.JoinVertical(lipgloss.Left, title, "", s.confirm.View())

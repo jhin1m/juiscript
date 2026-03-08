@@ -28,15 +28,12 @@ type PHPScreen struct {
 	// Confirm for destructive remove action
 	confirm       *components.ConfirmModel
 	pendingTarget string // version to remove
-	// Spinner for install/remove
-	spinner *components.SpinnerModel
 }
 
 func NewPHPScreen(t *theme.Theme) *PHPScreen {
 	return &PHPScreen{
 		theme:   t,
 		confirm: components.NewConfirm(t),
-		spinner: components.NewSpinner(t),
 	}
 }
 
@@ -53,20 +50,13 @@ func (p *PHPScreen) SetError(err error) {
 	p.err = err
 }
 
-// StopSpinner deactivates the spinner (called by App on result).
-func (p *PHPScreen) StopSpinner() {
-	p.spinner.Stop()
-}
+// StopSpinner is a no-op kept for App compatibility.
+// Install/remove now run in background without blocking the UI.
+func (p *PHPScreen) StopSpinner() {}
 
 func (p *PHPScreen) Init() tea.Cmd { return nil }
 
 func (p *PHPScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Forward spinner ticks when active
-	if p.spinner.Active() {
-		_, cmd := p.spinner.Update(msg)
-		return p, cmd
-	}
-
 	// Confirm dialog takes priority
 	if p.confirm.Active() {
 		_, cmd := p.confirm.Update(msg)
@@ -98,10 +88,10 @@ func (p *PHPScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case components.FormSubmitMsg:
 				p.formActive = false
 				version := v.Values["version"]
-				spinCmd := p.spinner.Start("Installing PHP " + version + "...")
-				return p, tea.Batch(spinCmd, func() tea.Msg {
+				// Don't block UI with spinner — install runs in background
+				return p, func() tea.Msg {
 					return InstallPHPMsg{Version: version}
-				})
+				}
 			case components.FormCancelMsg:
 				p.formActive = false
 				return p, nil
@@ -156,11 +146,6 @@ func (p *PHPScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (p *PHPScreen) View() string {
 	title := p.theme.Title.Render("PHP Versions")
-
-	// Spinner replaces content during operations
-	if p.spinner.Active() {
-		return lipgloss.JoinVertical(lipgloss.Left, title, "", p.spinner.View())
-	}
 
 	// Confirm dialog replaces content
 	if p.confirm.Active() {

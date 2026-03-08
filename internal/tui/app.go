@@ -41,8 +41,10 @@ type DetectPackagesErrMsg struct {
 }
 
 // PHPVersionsMsg delivers installed PHP versions to the PHP screen.
+// Action indicates what triggered this refresh ("install", "remove", or "" for initial load).
 type PHPVersionsMsg struct {
 	Versions []php.VersionInfo
+	Action   string // "install", "remove", or "" (initial load)
 }
 
 // PHPVersionsErrMsg reports a failure to list PHP versions.
@@ -285,12 +287,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PHPVersionsMsg:
 		a.phpScreen.StopSpinner()
 		a.phpScreen.SetVersions(msg.Versions)
+		// Show toast only after install/remove actions, not initial load
+		if msg.Action != "" {
+			toastCmd := a.toast.Show(components.ToastSuccess, "PHP "+msg.Action+" completed successfully")
+			return a, toastCmd
+		}
 		return a, nil
 
 	case PHPVersionsErrMsg:
 		a.phpScreen.StopSpinner()
 		a.phpScreen.SetError(msg.Err)
-		return a, nil
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
 
 	case tea.KeyMsg:
 		// Global quit: ctrl+c always quits
@@ -391,12 +399,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.TestNginxMsg:
 		return a, a.handleTestNginx()
 
-	// PHP screen messages
+	// PHP screen messages — install/remove run in background, user can navigate freely
 	case screens.InstallPHPMsg:
-		return a, a.handleInstallPHP(msg.Version)
+		toastCmd := a.toast.Show(components.ToastWarning, "Installing PHP "+msg.Version+"... (running in background)")
+		return a, tea.Batch(toastCmd, a.handleInstallPHP(msg.Version))
 
 	case screens.RemovePHPMsg:
-		return a, a.handleRemovePHP(msg.Version)
+		toastCmd := a.toast.Show(components.ToastWarning, "Removing PHP "+msg.Version+"... (running in background)")
+		return a, tea.Batch(toastCmd, a.handleRemovePHP(msg.Version))
 
 	case screens.SetDefaultPHPMsg:
 		// Update config and save, then refresh PHP screen
@@ -420,15 +430,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.ExportDBMsg:
 		return a, a.handleExportDB(msg.Name)
 
-	// SSL screen messages
+	// SSL screen messages — operations run in background
 	case screens.ObtainCertMsg:
-		return a, a.handleObtainCert(msg.Domain, msg.Email)
+		toastCmd := a.toast.Show(components.ToastWarning, "Obtaining certificate for "+msg.Domain+"... (running in background)")
+		return a, tea.Batch(toastCmd, a.handleObtainCert(msg.Domain, msg.Email))
 
 	case screens.RevokeCertMsg:
-		return a, a.handleRevokeCert(msg.Domain)
+		toastCmd := a.toast.Show(components.ToastWarning, "Revoking certificate for "+msg.Domain+"... (running in background)")
+		return a, tea.Batch(toastCmd, a.handleRevokeCert(msg.Domain))
 
 	case screens.RenewCertMsg:
-		return a, a.handleRenewCert(msg.Domain)
+		toastCmd := a.toast.Show(components.ToastWarning, "Renewing certificate for "+msg.Domain+"... (running in background)")
+		return a, tea.Batch(toastCmd, a.handleRenewCert(msg.Domain))
 
 	// Service screen messages
 	case screens.StartServiceMsg:
@@ -456,12 +469,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.DeleteWorkerMsg:
 		return a, a.handleDeleteWorker(msg.Name)
 
-	// Backup screen messages
+	// Backup screen messages — operations run in background
 	case screens.CreateBackupMsg:
-		return a, a.handleCreateBackup(msg.Domain, msg.Type)
+		toastCmd := a.toast.Show(components.ToastWarning, "Creating backup for "+msg.Domain+"... (running in background)")
+		return a, tea.Batch(toastCmd, a.handleCreateBackup(msg.Domain, msg.Type))
 
 	case screens.RestoreBackupMsg:
-		return a, a.handleRestoreBackup(msg.Path, msg.Domain)
+		toastCmd := a.toast.Show(components.ToastWarning, "Restoring backup for "+msg.Domain+"... (running in background)")
+		return a, tea.Batch(toastCmd, a.handleRestoreBackup(msg.Path, msg.Domain))
 
 	case screens.DeleteBackupMsg:
 		return a, a.handleDeleteBackup(msg.Path)
