@@ -5,7 +5,14 @@
 ```
 juiscript/
 ├── cmd/juiscript/
-│   └── main.go                 # CLI entry, Cobra root, TUI launcher
+│   ├── main.go                 # CLI entry, Cobra root, TUI launcher + initManagers()
+│   ├── cmd-site.go             # site {list,create,delete,enable,disable,info}
+│   ├── cmd-db.go               # db {list,create,drop,user-create,user-drop,reset-password,import,export}
+│   ├── cmd-php.go              # php {list,install,remove}
+│   ├── cmd-ssl.go              # ssl {list,obtain,revoke,renew}
+│   ├── cmd-service.go          # service {start,stop,restart,reload,status,list}
+│   ├── cmd-backup.go           # backup {list,create,restore,delete,cleanup,cron-setup,cron-remove}
+│   └── cmd-queue.go            # queue {list,create,delete,start,stop,restart,status}
 ├── internal/
 │   ├── config/
 │   │   ├── config.go           # TOML config struct, Load/Save, defaults
@@ -77,14 +84,17 @@ juiscript/
 
 ## Key Files & Responsibilities
 
-### cmd/juiscript/main.go (123 lines)
-**Purpose**: CLI entry point with Phase 1 backend wiring
-- Cobra root command with TUI as default action
+### cmd/juiscript/main.go
+**Purpose**: CLI entry point with shared manager initialization
+- Cobra root command with TUI as default action (no args launches TUI)
 - Version command for build info
-- **Phase 1**: Constructs all 9 backend managers in runTUI():
+- **PersistentPreRunE**: Root check enforces os.Geteuid() == 0 (except version command)
+- **initManagers()**: Shared manager construction for both TUI and CLI commands
   - System abstractions: Executor, FileManager, UserManager
   - Core managers: PHPManager, ServiceManager, Provisioner
   - Domain managers: NginxManager, DatabaseManager, SiteManager, SSLManager, SupervisorManager, BackupManager
+  - Returns Managers struct with 9 manager fields
+- **8 command groups wired**: Site, PHP, DB, SSL, Service, Backup, Queue commands
 - Passes (cfg, AppDeps) to tui.NewApp for dependency injection
 - Log file: /var/log/juiscript.log (fallback to discard if no permission)
 - Build-time ldflags: version, commit

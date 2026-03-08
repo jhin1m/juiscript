@@ -105,11 +105,11 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
 - [x] Service control: start/stop/restart/reload services
 - [x] Service status monitoring with health checks
 - [x] TUI service management screen
-- [ ] Site creation and deletion (integrates Nginx + PHP)
-- [ ] MariaDB user/database management
-- [ ] SSL certificate automation
-- [ ] Backup scheduling and execution
-- [ ] Supervisor queue worker management
+- [x] Site creation and deletion (integrates Nginx + PHP)
+- [x] MariaDB user/database management
+- [x] SSL certificate automation
+- [x] Backup scheduling and execution
+- [x] Supervisor queue worker management
 
 ### Quality Standards
 - Unit test coverage > 70%

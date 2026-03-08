@@ -59,7 +59,133 @@ Reusable FormModel, ConfirmModel, ToastModel, SpinnerModel components. All 6 pla
 - [x] Error toast/notification khi operation fail
 - [x] Success toast sau mỗi action
 
-## Phase 3: Missing Documentation (Priority: LOW)
+## Phase 3: Feature Parity with HostVN (Priority: HIGH)
+
+Tính năng thiết yếu cho hosting management, chưa có trong juiscript.
+
+### Firewall Management (UFW + Fail2ban)
+- [ ] `firewall-manager.go` - wrap UFW + Fail2ban commands
+- [ ] CLI: `juiscript firewall status` - show firewall status + rules
+- [ ] CLI: `juiscript firewall open-port --port <port>` - allow port
+- [ ] CLI: `juiscript firewall close-port --port <port>` - deny port
+- [ ] CLI: `juiscript firewall block-ip --ip <ip>` - block IP via Fail2ban
+- [ ] CLI: `juiscript firewall unblock-ip --ip <ip>` - unblock IP
+- [ ] CLI: `juiscript firewall list-blocked` - list blocked IPs
+- [ ] TUI: Firewall screen with port/IP management
+
+### Cache Management (Redis/Memcached/Opcache)
+- [ ] `cache-manager.go` - manage cache services per site
+- [ ] CLI: `juiscript cache enable-redis --domain <domain>` - enable Redis for site
+- [ ] CLI: `juiscript cache disable-redis --domain <domain>` - disable Redis
+- [ ] CLI: `juiscript cache flush --domain <domain>` - flush all caches
+- [ ] CLI: `juiscript cache opcache-reset` - reset PHP Opcache
+- [ ] TUI: Cache screen with enable/disable/flush actions
+
+### Nginx Config Tuning
+- [ ] Extend `nginx-manager.go` - FastCGI cache, Brotli, security headers
+- [ ] CLI: `juiscript nginx enable-cache --domain <domain>` - FastCGI cache
+- [ ] CLI: `juiscript nginx disable-cache --domain <domain>`
+- [ ] CLI: `juiscript nginx enable-brotli` - Brotli compression
+- [ ] CLI: `juiscript nginx security-headers --domain <domain>` - add security headers
+- [ ] Template-based nginx snippets for cache/compression configs
+
+### WordPress Auto-Install & Management
+- [ ] `wordpress-manager.go` - WP-CLI wrapper
+- [ ] CLI: `juiscript wp install --domain <domain> --title <title> --admin-user <user> --admin-email <email>`
+- [ ] CLI: `juiscript wp update --domain <domain>` - update WP core
+- [ ] CLI: `juiscript wp secure --domain <domain>` - apply security hardening (disable XML-RPC, protect wp-admin, disable file editing)
+- [ ] CLI: `juiscript wp plugins --domain <domain>` - list/update plugins
+- [ ] TUI: WordPress screen with install/update/secure actions
+
+### Cloud Backup (Google Drive / OneDrive via Rclone)
+- [ ] Extend `backup-manager.go` - Rclone integration
+- [ ] CLI: `juiscript backup create --domain <domain> --dest gdrive|onedrive|local`
+- [ ] CLI: `juiscript backup restore --source gdrive|onedrive|local --path <path>`
+- [ ] CLI: `juiscript backup connect-gdrive` - configure Rclone remote
+- [ ] CLI: `juiscript backup connect-onedrive` - configure Rclone remote
+- [ ] TUI: Backup destination selector in create form
+
+### VPS Info & Monitoring
+- [ ] `vps-manager.go` - system info from /proc/ and systemctl
+- [ ] CLI: `juiscript vps info` - CPU, RAM, disk, uptime, OS version
+- [ ] CLI: `juiscript vps disk` - disk usage per partition
+- [ ] CLI: `juiscript vps processes` - top processes by CPU/memory
+- [ ] TUI: VPS info dashboard screen
+
+## Phase 4: Extended Features (Priority: MEDIUM)
+
+### Domain Redirect & Alias
+- [ ] CLI: `juiscript site add-alias --domain <domain> --alias <alias>` - parked/alias domain
+- [ ] CLI: `juiscript site add-redirect --from <domain> --to <url>` - 301/302 redirect
+- [ ] Nginx config generation for aliases and redirects
+
+### Clone Website
+- [ ] CLI: `juiscript site clone --source <domain> --dest <domain>` - duplicate site (files + DB)
+- [ ] Copy webroot, DB dump/import, generate new vhost config
+
+### SSH Hardening
+- [ ] CLI: `juiscript vps ssh-port --port <port>` - change SSH port
+- [ ] CLI: `juiscript vps create-swap --size <GB>` - create swap file
+- [ ] Update UFW rules after SSH port change
+
+### Cronjob Management
+- [ ] `cron-manager.go` - programmatic crontab read/write
+- [ ] CLI: `juiscript cron list` - list current crontab entries
+- [ ] CLI: `juiscript cron add --schedule "<cron>" --command "<cmd>"` - add cron entry
+- [ ] CLI: `juiscript cron remove --id <id>` - remove cron entry
+- [ ] TUI: Cron screen with list/add/remove actions
+
+### PHP Per-Site Config
+- [ ] CLI: `juiscript php config --domain <domain> --open-basedir on|off`
+- [ ] CLI: `juiscript php extensions --domain <domain> --install <ext>` - install PHP extension
+- [ ] FPM pool config per-site tuning (memory_limit, upload_max_filesize, etc.)
+
+### Directory Protection
+- [ ] CLI: `juiscript site protect --domain <domain> --path <path>` - add HTTP basic auth
+- [ ] CLI: `juiscript site unprotect --domain <domain> --path <path>` - remove protection
+- [ ] Generate .htpasswd files and Nginx auth config
+
+## Phase 5: Nice-to-Have Features (Priority: LOW)
+
+### WordPress Security Hardening
+- [ ] Disable XML-RPC per site
+- [ ] Block plugin/theme file editing
+- [ ] Disable user enumeration API
+- [ ] Auto-configure cache plugins (WP-Rocket, W3TC, etc.)
+
+### Nginx Pagespeed Module
+- [ ] Minify JS/CSS/HTML
+- [ ] Image compression & WebP conversion
+- [ ] Combine JS/CSS files
+
+### Telegram Notifications
+- [ ] `telegram-manager.go` - Telegram Bot API wrapper
+- [ ] SSH login alerts
+- [ ] Service down alerts
+- [ ] Disk space warnings
+- [ ] CLI: `juiscript notify setup --bot-token <token> --chat-id <id>`
+
+### Admin Panels
+- [ ] phpMyAdmin install/update
+- [ ] Redis admin panel
+- [ ] Opcache dashboard
+- [ ] Random port for admin panel security
+
+### Security Tools
+- [ ] ClamAV anti-virus install/scan
+- [ ] ImunifyAV integration
+- [ ] Malware scan scheduling
+
+### Deployment Tools
+- [ ] Git deploy from GitHub/GitLab repo
+- [ ] Image compression tools (OptiPNG)
+- [ ] Node.js/NPM installation
+
+### Permissions Management
+- [ ] CLI: `juiscript site fix-permissions --domain <domain>` - chown/chmod single site
+- [ ] CLI: `juiscript site fix-permissions --all` - fix all sites
+
+## Phase 6: Missing Documentation (Priority: LOW)
 
 - [ ] `docs/design-guidelines.md`
 - [ ] `docs/deployment-guide.md`
