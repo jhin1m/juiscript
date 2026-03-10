@@ -26,6 +26,7 @@ type Config struct {
 
 type GeneralConfig struct {
 	SitesRoot string `toml:"sites_root"` // base dir for site home dirs
+	SitesDir  string `toml:"sites_dir"`  // site metadata dir (overrides default)
 	LogFile   string `toml:"log_file"`
 	BackupDir string `toml:"backup_dir"`
 }
@@ -93,9 +94,18 @@ func ConfigPath() string {
 	return filepath.Join(DefaultConfigDir, DefaultConfigFile)
 }
 
-// SitesPath returns the path to site metadata directory.
+// SitesPath returns the path to site metadata directory (package-level default).
 func SitesPath() string {
 	return filepath.Join(DefaultConfigDir, DefaultSitesDir)
+}
+
+// SitesPath returns the site metadata directory, using General.SitesDir if set.
+// This method enables tests to override the metadata path via config.
+func (c *Config) SitesPath() string {
+	if c.General.SitesDir != "" {
+		return c.General.SitesDir
+	}
+	return SitesPath()
 }
 
 // Load reads config from the given path. Falls back to defaults on missing file.
@@ -142,7 +152,7 @@ func (c *Config) Save(path string) error {
 func EnsureDirs(cfg *Config) error {
 	dirs := []string{
 		DefaultConfigDir,
-		SitesPath(),
+		cfg.SitesPath(),
 		cfg.General.BackupDir,
 	}
 

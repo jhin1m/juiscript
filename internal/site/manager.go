@@ -130,7 +130,7 @@ func (m *Manager) Create(opts CreateOptions) (*Site, error) {
 	}
 
 	// Step 7: Save metadata (last step - everything else succeeded)
-	if err := SaveMetadata(config.SitesPath(), site); err != nil {
+	if err := SaveMetadata(m.config.SitesPath(), site); err != nil {
 		rollback()
 		return nil, fmt.Errorf("save metadata: %w", err)
 	}
@@ -160,17 +160,17 @@ func (m *Manager) Delete(domain string, removeDB bool) error {
 	}
 
 	// 5. Remove metadata
-	return DeleteMetadata(config.SitesPath(), domain)
+	return DeleteMetadata(m.config.SitesPath(), domain)
 }
 
 // List returns all managed sites sorted by domain.
 func (m *Manager) List() ([]*Site, error) {
-	return LoadAllMetadata(config.SitesPath())
+	return LoadAllMetadata(m.config.SitesPath())
 }
 
 // Get retrieves a single site by domain.
 func (m *Manager) Get(domain string) (*Site, error) {
-	return LoadMetadata(config.SitesPath(), domain)
+	return LoadMetadata(m.config.SitesPath(), domain)
 }
 
 // Enable activates a site via nginx.Manager and updates metadata.
@@ -184,7 +184,7 @@ func (m *Manager) Enable(domain string) error {
 		return err
 	}
 	site.Enabled = true
-	return SaveMetadata(config.SitesPath(), site)
+	return SaveMetadata(m.config.SitesPath(), site)
 }
 
 // Disable deactivates a site via nginx.Manager and updates metadata.
@@ -198,7 +198,7 @@ func (m *Manager) Disable(domain string) error {
 		return err
 	}
 	site.Enabled = false
-	return SaveMetadata(config.SitesPath(), site)
+	return SaveMetadata(m.config.SitesPath(), site)
 }
 
 // buildVhostConfig converts a Site into an nginx.VhostConfig.
@@ -258,21 +258,29 @@ func (m *Manager) createDirs(site *Site) error {
 // createFPMPool generates and writes the PHP-FPM pool config.
 func (m *Manager) createFPMPool(site *Site) error {
 	data := struct {
-		PoolName     string
-		User         string
-		SocketPath   string
-		MaxChildren  int
-		StartServers int
-		MinSpare     int
-		MaxSpare     int
+		PoolName      string
+		User          string
+		SocketPath    string
+		MaxChildren   int
+		StartServers  int
+		MinSpare      int
+		MaxSpare      int
+		MaxRequests   int
+		MemoryLimit   string
+		UploadMaxSize string
+		Timezone      string
 	}{
-		PoolName:     site.User,
-		User:         site.User,
-		SocketPath:   site.PHPSocket(),
-		MaxChildren:  5,
-		StartServers: 2,
-		MinSpare:     1,
-		MaxSpare:     3,
+		PoolName:      site.User,
+		User:          site.User,
+		SocketPath:    site.PHPSocket(),
+		MaxChildren:   5,
+		StartServers:  2,
+		MinSpare:      1,
+		MaxSpare:      3,
+		MaxRequests:   500,
+		MemoryLimit:   "256M",
+		UploadMaxSize: "64M",
+		Timezone:      "UTC",
 	}
 
 	rendered, err := m.tpl.Render("php-fpm-pool.conf.tmpl", data)

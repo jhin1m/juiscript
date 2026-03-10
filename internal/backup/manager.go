@@ -156,7 +156,7 @@ func (m *Manager) Create(ctx context.Context, opts Options) (*BackupInfo, error)
 	}
 
 	// Load site metadata to get DB name, user, etc.
-	s, err := site.LoadMetadata(config.SitesPath(), opts.Domain)
+	s, err := site.LoadMetadata(m.config.SitesPath(), opts.Domain)
 	if err != nil {
 		return nil, fmt.Errorf("load site metadata: %w", err)
 	}
@@ -280,7 +280,7 @@ func (m *Manager) Restore(ctx context.Context, backupPath, domain string) error 
 	}
 
 	// Load site metadata for paths
-	s, err := site.LoadMetadata(config.SitesPath(), domain)
+	s, err := site.LoadMetadata(m.config.SitesPath(), domain)
 	if err != nil {
 		return fmt.Errorf("load site metadata: %w", err)
 	}

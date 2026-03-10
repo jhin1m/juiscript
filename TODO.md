@@ -191,6 +191,9 @@ Tính năng thiết yếu cho hosting management, chưa có trong juiscript.
 - [ ] `docs/deployment-guide.md`
 - [ ] `docs/project-roadmap.md`
 
+## Bug fixes & Improvements
+- [ ] Can't press J or K in site manager screen (input focus issue)
+
 ## Notes
 
 - Backend modules: 11/11 complete voi test coverage
