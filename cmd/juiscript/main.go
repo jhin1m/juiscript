@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jhin1m/juiscript/internal/backup"
+	"github.com/jhin1m/juiscript/internal/cache"
 	"github.com/jhin1m/juiscript/internal/config"
 	"github.com/jhin1m/juiscript/internal/database"
 	"github.com/jhin1m/juiscript/internal/firewall"
@@ -44,6 +45,7 @@ type Managers struct {
 	Nginx   *nginx.Manager
 	Prov     *provisioner.Provisioner
 	Firewall *firewall.Manager
+	Cache    *cache.Manager
 }
 
 // initManagers creates logger, loads config, and constructs all backend managers.
@@ -87,6 +89,7 @@ func initManagers() (*Managers, error) {
 	supervisorMgr := supervisor.NewManager(exec, fileMgr, tplEngine)
 	backupMgr := backup.NewManager(cfg, exec, fileMgr, dbMgr)
 	firewallMgr := firewall.NewManager(exec)
+	cacheMgr := cache.NewManager(exec, cfg)
 
 	return &Managers{
 		Cfg:     cfg,
@@ -101,6 +104,7 @@ func initManagers() (*Managers, error) {
 		Nginx:   nginxMgr,
 		Prov:     prov,
 		Firewall: firewallMgr,
+		Cache:    cacheMgr,
 	}, nil
 }
 
@@ -143,6 +147,7 @@ func main() {
 	rootCmd.AddCommand(backupCmd(mgrs))
 	rootCmd.AddCommand(queueCmd(mgrs))
 	rootCmd.AddCommand(firewallCmd(mgrs))
+	rootCmd.AddCommand(cacheCmd(mgrs))
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -162,6 +167,7 @@ func runTUI(mgrs *Managers) error {
 		SuperMgr:  mgrs.Super,
 		BackupMgr:   mgrs.Backup,
 		FirewallMgr: mgrs.Firewall,
+		CacheMgr:    mgrs.Cache,
 	})
 
 	p := tea.NewProgram(app, tea.WithAltScreen())

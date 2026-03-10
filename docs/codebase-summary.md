@@ -13,7 +13,8 @@ juiscript/
 │   ├── cmd-service.go          # service {start,stop,restart,reload,status,list}
 │   ├── cmd-backup.go           # backup {list,create,restore,delete,cleanup,cron-setup,cron-remove}
 │   ├── cmd-queue.go            # queue {list,create,delete,start,stop,restart,status}
-│   └── cmd-firewall.go         # firewall {status,open-port,close-port,ban-ip,unban-ip,list-blocked}
+│   ├── cmd-firewall.go         # firewall {status,open-port,close-port,ban-ip,unban-ip,list-blocked}
+│   └── cmd-cache.go            # cache {status,enable-redis,disable-redis,flush,opcache-reset}
 ├── internal/
 │   ├── config/
 │   │   ├── config.go           # TOML config struct, Load/Save, defaults
@@ -49,6 +50,9 @@ juiscript/
 │   ├── supervisor/
 │   │   ├── manager.go          # Queue worker lifecycle (create/delete/start/stop/status)
 │   │   └── manager_test.go     # Unit tests
+│   ├── cache/
+│   │   ├── manager.go          # Redis status, enable/disable, flush, opcache reset
+│   │   └── manager_test.go     # 15 unit tests
 │   ├── backup/
 │   │   ├── manager.go          # Backup lifecycle (create/restore/list/delete/cleanup/cron)
 │   │   └── manager_test.go     # 34 unit tests
@@ -76,7 +80,8 @@ juiscript/
 │           ├── queues.go       # Queue worker management screen (Phase 08)
 │           ├── services.go     # Service control screen
 │           ├── backup.go       # Backup/restore management screen (Phase 09)
-│           └── firewall.go     # Firewall rules & IP blocking screen (Phase 10)
+│           ├── firewall.go     # Firewall rules & IP blocking screen (Phase 10)
+│           └── cache.go        # Cache management screen (Redis & Opcache)
 ├── templates/
 │   ├── nginx-laravel.conf.tmpl     # Laravel vhost template
 │   ├── nginx-wordpress.conf.tmpl   # WordPress vhost template
@@ -1085,6 +1090,61 @@ Manager {
 - Firewall menu link added to main dashboard
 - Key '4' navigates to Firewall screen
 - Setup moved to key '0'
+
+## Cache Management Implementation (Phase 11)
+
+### internal/cache/manager.go
+
+**Redis & Opcache Manager**:
+```go
+Manager {
+  Status(ctx) → (*CacheStatus, error)      // Redis status, version, memory
+  EnableRedis(ctx, domain string, db int) error    // Ensure Redis running
+  DisableRedis(ctx, domain string) error           // Placeholder for config changes
+  FlushDB(ctx, db int) error               // Flush specific Redis DB
+  FlushAll(ctx) error                      // Flush all Redis databases
+  ResetOpcache(ctx, phpVersion string) error       // Restart PHP-FPM to clear opcache
+}
+```
+
+**Data Structures**:
+- `CacheStatus`: RedisRunning, RedisVersion, RedisMemory (human-readable)
+- DB validation: 0-15 (configurable max via config.Redis.MaxDatabases)
+- PHP version validation: Regex format X.Y (e.g., "8.3", "7.4")
+
+**Operations**:
+- **Status**: PING redis-cli, INFO server/memory parsing
+- **EnableRedis**: Check systemctl is-active, start if needed, verify PING
+- **DisableRedis**: Placeholder (app-level config changes required)
+- **FlushDB**: `redis-cli -n {db} FLUSHDB`
+- **FlushAll**: `redis-cli FLUSHALL` (destructive)
+- **ResetOpcache**: `systemctl restart php{version}-fpm`
+
+### cmd/juiscript/cmd-cache.go
+
+**CLI Subcommands**:
+- `cache status`: Show Redis connectivity, version, memory usage
+- `cache enable-redis --domain example.com --db 0`: Start Redis for site
+- `cache disable-redis --domain example.com`: Placeholder notification
+- `cache flush --db 0`: Flush specific Redis database
+- `cache flush --all --force`: Flush all databases (requires --force flag)
+- `cache opcache-reset [--php-version 8.3]`: Restart PHP-FPM to reset opcache
+
+### internal/tui/screens/cache.go
+
+**CacheScreen**: Redis and opcache management
+- Redis status display: Running/Not running, version, memory
+- Input modes: Flush-db number entry, opcache-version selector
+- Confirm mode for destructive actions (flush-all)
+- Messages: FlushRedisDBMsg, FlushRedisAllMsg, ResetOpcacheMsg
+- Keyboard shortcuts for quick cache operations
+
+### Dashboard Integration
+
+**Dashboard.go (UPDATED)**:
+- Cache menu link added to main dashboard
+- Key 'c' navigates to Cache screen
+- Positioned with other management features
 
 ## Future Additions
 

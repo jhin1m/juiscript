@@ -22,11 +22,11 @@ juiscript is a single-binary LEMP management tool with three layers:
 - Cobra CLI root with version command
 - Launches Bubble Tea TUI as default action
 - Injects version/commit from build-time ldflags
-- Phase 1: Constructs all 9 backend managers and passes via AppDeps
+- Phase 1: Constructs all 11 backend managers and passes via AppDeps
 - Manager construction order:
   1. System abstractions: Executor, FileManager, UserManager
   2. Core managers: PHPManager, ServiceManager, Provisioner
-  3. Domain managers: NginxManager, DatabaseManager, SiteManager, SSLManager, SupervisorManager, BackupManager
+  3. Domain managers: NginxManager, DatabaseManager, SiteManager, SSLManager, SupervisorManager, BackupManager, FirewallManager, CacheManager
 - All managers initialized with appropriate dependencies
 - Passes cfg + AppDeps to tui.NewApp for injection
 
@@ -39,7 +39,7 @@ juiscript version      → Print version
 
 **internal/tui/app.go** (Root Model - Phase 1: Backend Wiring)
 - Screen router for TUI with injected backend managers
-- AppDeps struct: Encapsulates all 10 backend managers for dependency injection
+- AppDeps struct: Encapsulates all 11 backend managers for dependency injection
 - All managers are optional (nil-safe) for graceful degradation
 - App struct fields:
   - `svcMgr` (service.Manager): Service control
@@ -52,6 +52,7 @@ juiscript version      → Print version
   - `supervisorMgr` (supervisor.Manager): Queue worker management
   - `backupMgr` (backup.Manager): Backup/restore operations
   - `firewallMgr` (firewall.Manager): Firewall & IP blocking
+  - `cacheMgr` (cache.Manager): Redis & opcache management
 - NewApp(cfg, AppDeps) constructor for clean initialization
 - Keyboard navigation: 'j'/'k' move, 'enter' select, 'q' quit
 - Screen transitions via NavigateMsg/GoBackMsg
@@ -302,6 +303,23 @@ Three core interfaces for testability (no root in tests):
    - Rule parsing from `ufw status numbered` output (rule number, port, action, source)
    - Jail management for fail2ban: sshd, nginx-http-auth, etc.
    - TUI dual-tab screen: UFW rules + blocked IPs list
+
+11. **cache/** (Phase 11 - Complete)
+   ```go
+   Manager {
+     Status(ctx) → (*CacheStatus, error)                  // Redis status, version, memory
+     EnableRedis(ctx, domain string, db int) error        // Ensure Redis running
+     DisableRedis(ctx, domain string) error               // Placeholder for config updates
+     FlushDB(ctx, db int) error                           // Flush specific Redis database
+     FlushAll(ctx) error                                  // Flush all Redis databases
+     ResetOpcache(ctx, phpVersion string) error           // Restart PHP-FPM to clear opcache
+   }
+   ```
+   - Redis connectivity check via PING with status reporting
+   - Database-level flush operations with validation (0-15 range)
+   - Opcache reset via PHP-FPM service restart (format: X.Y)
+   - Operations via redis-cli and systemctl (no client library)
+   - TUI cache management screen with status display and flush/reset controls
 
 ## Data Flow
 

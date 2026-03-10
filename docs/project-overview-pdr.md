@@ -119,6 +119,10 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
 - [x] UFW firewall rule management (open/close ports)
 - [x] Fail2ban IP blocking integration
 - [x] TUI firewall management screen
+- [x] Redis cache management and status monitoring
+- [x] PHP Opcache reset functionality
+- [x] Cache flush operations (per-database and all)
+- [x] TUI cache management screen
 
 ### Quality Standards
 - Unit test coverage > 70%
@@ -209,6 +213,15 @@ juiscript is a production-grade LEMP (Linux, Nginx, PHP-FPM, MariaDB) server man
   - Dual-tab TUI screen: UFW rules + blocked IPs table view
   - CLI subcommands for firewall operations
   - Port range validation (1-65535), IP format validation
+
+- **Phase 11** (Complete): Cache Management
+  - Redis status monitoring (connectivity, version, memory)
+  - Redis enable/disable per site with DB validation
+  - Cache flush operations (per-database and all databases)
+  - PHP Opcache reset via PHP-FPM restart
+  - TUI cache management screen with status display
+  - CLI subcommands for cache operations
+  - 15 unit tests with mock executor
 
 ## Dependencies
 

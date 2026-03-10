@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jhin1m/juiscript/internal/backup"
+	"github.com/jhin1m/juiscript/internal/cache"
 	"github.com/jhin1m/juiscript/internal/config"
 	"github.com/jhin1m/juiscript/internal/database"
 	"github.com/jhin1m/juiscript/internal/firewall"
@@ -69,6 +70,7 @@ const (
 	ScreenQueues
 	ScreenBackup
 	ScreenFirewall
+	ScreenCache
 	ScreenSetup
 )
 
@@ -83,6 +85,7 @@ var screenNames = map[string]Screen{
 	"Queues":   ScreenQueues,
 	"Backup":   ScreenBackup,
 	"Firewall": ScreenFirewall,
+	"Cache":    ScreenCache,
 	"Setup":    ScreenSetup,
 }
 
@@ -99,6 +102,7 @@ type AppDeps struct {
 	SuperMgr  *supervisor.Manager
 	BackupMgr   *backup.Manager
 	FirewallMgr *firewall.Manager
+	CacheMgr    *cache.Manager
 }
 
 // App is the root Bubble Tea model.
@@ -119,6 +123,7 @@ type App struct {
 	supervisorMgr *supervisor.Manager
 	backupMgr     *backup.Manager
 	firewallMgr   *firewall.Manager
+	cacheMgr      *cache.Manager
 	current     Screen
 	previous    Screen // for back navigation from sub-screens
 	dashboard   *screens.Dashboard
@@ -133,6 +138,7 @@ type App struct {
 	sslScreen        *screens.SSLScreen
 	backupScreen     *screens.BackupScreen
 	firewallScreen   *screens.FirewallScreen
+	cacheScreen      *screens.CacheScreen
 	setupScreen      *screens.SetupScreen
 	toast            *components.ToastModel
 	setupProgressCh  chan provisioner.ProgressEvent // nil when not installing
@@ -165,6 +171,7 @@ func NewApp(cfg *config.Config, deps AppDeps) *App {
 		supervisorMgr: deps.SuperMgr,
 		backupMgr:     deps.BackupMgr,
 		firewallMgr:   deps.FirewallMgr,
+		cacheMgr:      deps.CacheMgr,
 		toast:       components.NewToast(t),
 		current:     ScreenDashboard,
 		dashboard:   screens.NewDashboard(t),
@@ -179,6 +186,7 @@ func NewApp(cfg *config.Config, deps AppDeps) *App {
 		sslScreen:      screens.NewSSLScreen(t),
 		backupScreen:   screens.NewBackupScreen(t),
 		firewallScreen: screens.NewFirewallScreen(t),
+		cacheScreen:    screens.NewCacheScreen(t),
 		setupScreen:    screens.NewSetupScreen(t),
 	}
 }
@@ -234,6 +242,22 @@ func (a *App) fetchFirewallStatus() tea.Cmd {
 			return FirewallStatusErrMsg{Err: ufwErr}
 		}
 		return FirewallStatusMsg{UFW: ufwStatus, Jails: jails}
+	}
+}
+
+// fetchCacheStatus returns a tea.Cmd that fetches Redis/Opcache status asynchronously.
+func (a *App) fetchCacheStatus() tea.Cmd {
+	if a.cacheMgr == nil {
+		return func() tea.Msg {
+			return CacheStatusErrMsg{Err: fmt.Errorf("cache manager not available")}
+		}
+	}
+	return func() tea.Msg {
+		status, err := a.cacheMgr.Status(context.Background())
+		if err != nil {
+			return CacheStatusErrMsg{Err: err}
+		}
+		return CacheStatusMsg{Status: status}
 	}
 }
 
@@ -361,6 +385,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, a.fetchBackups(""))
 		case ScreenFirewall:
 			cmds = append(cmds, a.fetchFirewallStatus())
+		case ScreenCache:
+			cmds = append(cmds, a.fetchCacheStatus())
 		}
 		return a, tea.Batch(cmds...)
 
@@ -509,6 +535,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.UnbanIPMsg:
 		return a, a.handleUnbanIP(msg.IP, msg.Jail)
 
+	// Cache screen messages
+	case screens.FlushRedisDBMsg:
+		return a, a.handleFlushRedisDB(msg.DB)
+	case screens.FlushRedisAllMsg:
+		return a, a.handleFlushRedisAll()
+	case screens.ResetOpcacheMsg:
+		return a, a.handleResetOpcache(msg.PHPVersion)
+
 	// Backup screen messages — operations run in background
 	case screens.CreateBackupMsg:
 		toastCmd := a.toast.Show(components.ToastWarning, "Creating backup for "+msg.Domain+"... (running in background)")
@@ -637,6 +671,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
 		return a, toastCmd
 
+	// Cache results
+	case CacheStatusMsg:
+		a.cacheScreen.SetStatus(msg.Status)
+		return a, nil
+	case CacheStatusErrMsg:
+		a.cacheScreen.SetError(msg.Err)
+		return a, nil
+	case CacheOpDoneMsg:
+		toastCmd := a.toast.Show(components.ToastSuccess, "Cache operation completed")
+		return a, tea.Batch(toastCmd, a.fetchCacheStatus())
+	case CacheOpErrMsg:
+		a.cacheScreen.SetError(msg.Err)
+		toastCmd := a.toast.Show(components.ToastError, msg.Err.Error())
+		return a, toastCmd
+
 	// Backup results
 	case BackupListMsg:
 		a.backupScreen.StopSpinner()
@@ -721,6 +770,10 @@ func (a *App) updateActiveScreen(msg tea.Msg) tea.Cmd {
 		updated, cmd := a.firewallScreen.Update(msg)
 		a.firewallScreen = updated.(*screens.FirewallScreen)
 		return cmd
+	case ScreenCache:
+		updated, cmd := a.cacheScreen.Update(msg)
+		a.cacheScreen = updated.(*screens.CacheScreen)
+		return cmd
 	case ScreenSetup:
 		updated, cmd := a.setupScreen.Update(msg)
 		a.setupScreen = updated.(*screens.SetupScreen)
@@ -759,6 +812,8 @@ func (a *App) View() string {
 		content = a.backupScreen.View()
 	case ScreenFirewall:
 		content = a.firewallScreen.View()
+	case ScreenCache:
+		content = a.cacheScreen.View()
 	case ScreenSetup:
 		content = a.setupScreen.View()
 	default:
@@ -875,6 +930,13 @@ func (a *App) currentBindings() []components.KeyBinding {
 			{Key: "tab", Desc: "switch tab"},
 			{Key: "o/c/d", Desc: "open/close/delete"},
 			{Key: "b/u", Desc: "block/unblock"},
+			{Key: "esc", Desc: "back"},
+		}, base...)
+	case ScreenCache:
+		return append([]components.KeyBinding{
+			{Key: "f", Desc: "flush db"},
+			{Key: "F", Desc: "flush all"},
+			{Key: "o", Desc: "opcache reset"},
 			{Key: "esc", Desc: "back"},
 		}, base...)
 	case ScreenSetup:

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/jhin1m/juiscript/internal/backup"
+	"github.com/jhin1m/juiscript/internal/cache"
 	"github.com/jhin1m/juiscript/internal/database"
 	"github.com/jhin1m/juiscript/internal/firewall"
 	"github.com/jhin1m/juiscript/internal/nginx"
@@ -128,3 +129,19 @@ type FirewallOpDoneMsg struct{}
 
 // FirewallOpErrMsg reports a failed firewall operation.
 type FirewallOpErrMsg struct{ Err error }
+
+// -- Cache result messages --
+
+// CacheStatusMsg delivers Redis/Opcache status.
+type CacheStatusMsg struct {
+	Status *cache.CacheStatus
+}
+
+// CacheStatusErrMsg reports failure to fetch cache status.
+type CacheStatusErrMsg struct{ Err error }
+
+// CacheOpDoneMsg signals a cache operation succeeded.
+type CacheOpDoneMsg struct{}
+
+// CacheOpErrMsg reports a failed cache operation.
+type CacheOpErrMsg struct{ Err error }

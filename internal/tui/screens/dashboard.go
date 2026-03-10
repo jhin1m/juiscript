@@ -38,6 +38,7 @@ func NewDashboard(t *theme.Theme) *Dashboard {
 			{Title: "Queues", Desc: "Supervisor queue workers", Key: "7"},
 			{Title: "Backup", Desc: "Backup and restore sites", Key: "8"},
 			{Title: "Firewall", Desc: "UFW rules and IP blocking", Key: "9"},
+			{Title: "Cache", Desc: "Redis and Opcache management", Key: "c"},
 			{Title: "Setup", Desc: "Install missing packages", Key: "0"},
 		},
 	}
@@ -72,6 +73,14 @@ func (d *Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if idx < len(d.items) {
 				return d, func() tea.Msg {
 					return NavigateMsg{Screen: d.items[idx].Title}
+				}
+			}
+		case "c":
+			// Letter key for Cache screen
+			for i, item := range d.items {
+				if item.Title == "Cache" {
+					d.cursor = i
+					return d, func() tea.Msg { return NavigateMsg{Screen: "Cache"} }
 				}
 			}
 		case "0":

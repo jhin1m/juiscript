@@ -64,22 +64,22 @@ Reusable FormModel, ConfirmModel, ToastModel, SpinnerModel components. All 6 pla
 Tính năng thiết yếu cho hosting management, chưa có trong juiscript.
 
 ### Firewall Management (UFW + Fail2ban)
-- [ ] `firewall-manager.go` - wrap UFW + Fail2ban commands
-- [ ] CLI: `juiscript firewall status` - show firewall status + rules
-- [ ] CLI: `juiscript firewall open-port --port <port>` - allow port
-- [ ] CLI: `juiscript firewall close-port --port <port>` - deny port
-- [ ] CLI: `juiscript firewall block-ip --ip <ip>` - block IP via Fail2ban
-- [ ] CLI: `juiscript firewall unblock-ip --ip <ip>` - unblock IP
-- [ ] CLI: `juiscript firewall list-blocked` - list blocked IPs
-- [ ] TUI: Firewall screen with port/IP management
+- [x] `firewall-manager.go` - wrap UFW + Fail2ban commands
+- [x] CLI: `juiscript firewall status` - show firewall status + rules
+- [x] CLI: `juiscript firewall open-port --port <port>` - allow port
+- [x] CLI: `juiscript firewall close-port --port <port>` - deny port
+- [x] CLI: `juiscript firewall block-ip --ip <ip>` - block IP via Fail2ban
+- [x] CLI: `juiscript firewall unblock-ip --ip <ip>` - unblock IP
+- [x] CLI: `juiscript firewall list-blocked` - list blocked IPs
+- [x] TUI: Firewall screen with port/IP management
 
-### Cache Management (Redis/Memcached/Opcache)
-- [ ] `cache-manager.go` - manage cache services per site
-- [ ] CLI: `juiscript cache enable-redis --domain <domain>` - enable Redis for site
-- [ ] CLI: `juiscript cache disable-redis --domain <domain>` - disable Redis
-- [ ] CLI: `juiscript cache flush --domain <domain>` - flush all caches
-- [ ] CLI: `juiscript cache opcache-reset` - reset PHP Opcache
-- [ ] TUI: Cache screen with enable/disable/flush actions
+### Cache Management (Redis/Opcache) -- DONE
+- [x] `cache-manager.go` - manage cache services per site
+- [x] CLI: `juiscript cache enable-redis --domain <domain>` - enable Redis for site
+- [x] CLI: `juiscript cache disable-redis --domain <domain>` - disable Redis
+- [x] CLI: `juiscript cache flush --domain <domain>` - flush all caches
+- [x] CLI: `juiscript cache opcache-reset` - reset PHP Opcache
+- [x] TUI: Cache screen with enable/disable/flush actions
 
 ### Nginx Config Tuning
 - [ ] Extend `nginx-manager.go` - FastCGI cache, Brotli, security headers

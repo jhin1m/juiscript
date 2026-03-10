@@ -30,6 +30,7 @@ A single-binary Go tool to manage **Nginx, PHP-FPM, MariaDB, and Redis** on Ubun
 | **Backup** | Full/partial backup & restore with scheduling |
 | **Queue Workers** | Supervisor-managed Laravel queue workers |
 | **Service Control** | Start/stop/restart Nginx, PHP-FPM, MariaDB, Redis |
+| **Firewall** | UFW rules + Fail2ban IP blocking management |
 
 ## Quick Start
 
@@ -96,6 +97,7 @@ internal/
   backup/            Backup & restore
   supervisor/        Queue worker management
   service/           systemctl wrapper
+  firewall/          UFW & Fail2ban management
   provisioner/       Server provisioning
 ```
 
