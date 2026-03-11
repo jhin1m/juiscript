@@ -122,11 +122,26 @@ func (m *FormModel) Update(msg tea.Msg) (*FormModel, tea.Cmd) {
 		case "enter":
 			return m.handleEnter()
 
-		case "tab", "down", "j":
+		case "tab", "down":
 			m.handleCycleForward()
 
-		case "shift+tab", "up", "k":
+		case "shift+tab", "up":
 			m.handleCycleBackward()
+
+		case "j":
+			// Only navigate when NOT on a text field; otherwise treat as text input
+			if m.step < len(m.fields) && m.fields[m.step].Type == FieldText {
+				m.input += msg.String()
+			} else {
+				m.handleCycleForward()
+			}
+
+		case "k":
+			if m.step < len(m.fields) && m.fields[m.step].Type == FieldText {
+				m.input += msg.String()
+			} else {
+				m.handleCycleBackward()
+			}
 
 		case "backspace":
 			if m.step < len(m.fields) && m.fields[m.step].Type == FieldText && len(m.input) > 0 {
@@ -270,7 +285,7 @@ func (m *FormModel) View() string {
 		errLine = "\n" + m.theme.ErrorText.Render(fmt.Sprintf("  Error: %v", m.err))
 	}
 
-	help := m.theme.HelpDesc.Render("\n  enter:next  tab/j/k:cycle options  esc:cancel")
+	help := m.theme.HelpDesc.Render("\n  enter:next  tab/↑↓:cycle options  esc:cancel")
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		title, "", fields, errLine, help)

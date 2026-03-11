@@ -192,7 +192,7 @@ Tính năng thiết yếu cho hosting management, chưa có trong juiscript.
 - [ ] `docs/project-roadmap.md`
 
 ## Bug fixes & Improvements
-- [ ] Can't press J or K in site manager screen (input focus issue)
+- [x] Can't press J or K in site manager screen (input focus issue)
 
 ## Notes
 
