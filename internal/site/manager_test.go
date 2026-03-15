@@ -158,6 +158,9 @@ func setupTestSiteManager(t *testing.T) (*Manager, *mockExecutor, *mockFileManag
 	files := newMockFileManager()
 	users := newMockUserManager()
 
+	// Simulate PHP-FPM installed (directory exists on real systems)
+	files.exists["/etc/php/8.3/fpm"] = true
+
 	tmpDir := t.TempDir()
 	sitesDir := t.TempDir()
 
@@ -350,6 +353,25 @@ func TestCreate_InvalidPHPVersion(t *testing.T) {
 				t.Errorf("expected error for PHP version %q", ver)
 			}
 		})
+	}
+}
+
+func TestCreate_PHPNotInstalled(t *testing.T) {
+	mgr, _, files, _ := setupTestSiteManager(t)
+
+	// Override: PHP 8.2 is NOT installed
+	delete(files.exists, "/etc/php/8.2/fpm")
+
+	_, err := mgr.Create(CreateOptions{
+		Domain:      "test.example.com",
+		ProjectType: ProjectLaravel,
+		PHPVersion:  "8.2",
+	})
+	if err == nil {
+		t.Fatal("expected error when PHP version not installed")
+	}
+	if !strings.Contains(err.Error(), "not installed") {
+		t.Errorf("error should mention 'not installed', got: %v", err)
 	}
 }
 

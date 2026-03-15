@@ -34,6 +34,12 @@ func NewFileManager() FileManager {
 func (f *fileOps) WriteAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 
+	// Ensure parent directory exists before writing
+	// (e.g. /etc/php/8.3/fpm/pool.d/ may not exist yet)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create directory %s: %w", dir, err)
+	}
+
 	// Create temp file in the SAME directory so os.Rename is atomic
 	// (rename across filesystems is not atomic)
 	tmp, err := os.CreateTemp(dir, ".juiscript-tmp-*")

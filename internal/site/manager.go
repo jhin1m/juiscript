@@ -58,6 +58,14 @@ func (m *Manager) Create(opts CreateOptions) (*Site, error) {
 		return nil, err
 	}
 
+	// Check if PHP-FPM is installed for the requested version
+	// (directory only exists when php{ver}-fpm package is installed)
+	fpmDir := fmt.Sprintf("/etc/php/%s/fpm", opts.PHPVersion)
+	if !m.files.Exists(fpmDir) {
+		return nil, fmt.Errorf("php%s-fpm is not installed — install it first with: juiscript php install %s",
+			opts.PHPVersion, opts.PHPVersion)
+	}
+
 	username := DeriveUsername(opts.Domain)
 
 	// Check if site already exists
